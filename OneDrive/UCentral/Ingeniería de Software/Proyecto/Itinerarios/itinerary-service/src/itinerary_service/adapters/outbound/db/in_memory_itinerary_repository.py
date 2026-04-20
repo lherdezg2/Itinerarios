@@ -1,0 +1,15 @@
+from itinerary_service.application.ports.outbound.itinerary_repository_port import (
+    ItineraryRepositoryPort,
+)
+from itinerary_service.domain.itinerary import Itinerary
+
+
+class InMemoryItineraryRepository(ItineraryRepositoryPort):
+    def __init__(self) -> None:
+        self._items: list[Itinerary] = []
+
+    def save(self, itinerary: Itinerary) -> None:
+        self._items.append(itinerary)
+
+    def list_all(self) -> list[Itinerary]:
+        return list(self._items)
