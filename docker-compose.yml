@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  airport-service:
+    build:
+      context: ./airport-service
+    container_name: airport-service
+    ports:
+      - "8001:8001"
+
+  itinerary-service:
+    build:
+      context: ./itinerary-service
+    container_name: itinerary-service
+    ports:
+      - "8002:8002"
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16-alpine
+    container_name: itinerary-db
+    environment:
+      POSTGRES_DB: itineraries
+      POSTGRES_USER: itineraries_user
+      POSTGRES_PASSWORD: itineraries_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - itinerary-db-data:/var/lib/postgresql/data
+
+volumes:
+  itinerary-db-data:
