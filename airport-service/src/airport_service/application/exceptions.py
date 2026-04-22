@@ -1,0 +1,2 @@
+class ExternalAirportServiceError(Exception):
+    pass
