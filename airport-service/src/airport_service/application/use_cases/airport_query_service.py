@@ -13,6 +13,7 @@ class AirportQueryService(AirportQueryPort):
         return self._external_port.fetch_airport_by_id(airport_id)
 
     def search_airports(self, term: str) -> list[Airport]:
-        if not term:
+        cleaned = term.strip()
+        if not cleaned:
             return []
-        return self._external_port.search_airports(term)
+        return self._external_port.search_airports(cleaned)

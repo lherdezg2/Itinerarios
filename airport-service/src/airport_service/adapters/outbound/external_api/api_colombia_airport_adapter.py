@@ -30,9 +30,7 @@ class ApiColombiaAirportAdapter(ExternalAirportPort):
         return [
             airport
             for airport in airports
-            if normalized in airport.airport_id.lower()
-            or normalized in airport.name.lower()
-            or normalized in airport.city.lower()
+            if normalized in airport.name.lower() or normalized in airport.city.lower()
         ]
 
     def _fetch_airports(self) -> list[Airport]:

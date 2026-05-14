@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time
 
 from itinerary_service.application.ports.inbound.itinerary_command_port import (
     ItineraryCommandPort,
@@ -26,22 +26,22 @@ class ItineraryService(ItineraryCommandPort):
         itinerary_id: str,
         origin_airport_id: str,
         destination_airport_id: str,
-        start_date_iso: str,
-        end_date_iso: str,
+        travel_date_iso: str,
+        start_time_iso: str,
+        end_time_iso: str,
     ) -> Itinerary:
         self._validate_airports(origin_airport_id, destination_airport_id)
-        start_date = date.fromisoformat(start_date_iso)
-        end_date = date.fromisoformat(end_date_iso)
-
-        if start_date > end_date:
-            raise ValueError("La fecha de inicio no puede ser mayor que la fecha fin")
+        travel_date = date.fromisoformat(travel_date_iso)
+        start_time = time.fromisoformat(start_time_iso)
+        end_time = time.fromisoformat(end_time_iso)
 
         itinerary = Itinerary(
-            itinerary_id=itinerary_id,
-            origin_airport_id=origin_airport_id.upper(),
-            destination_airport_id=destination_airport_id.upper(),
-            start_date=start_date,
-            end_date=end_date,
+            itinerary_id=itinerary_id.strip(),
+            origin_airport_id=origin_airport_id.strip().upper(),
+            destination_airport_id=destination_airport_id.strip().upper(),
+            travel_date=travel_date,
+            start_time=start_time,
+            end_time=end_time,
         )
         self._itinerary_repository.save(itinerary)
         return itinerary
@@ -51,6 +51,6 @@ class ItineraryService(ItineraryCommandPort):
 
     def _validate_airports(self, origin_airport_id: str, destination_airport_id: str) -> None:
         if not self._airport_validation.airport_exists(origin_airport_id):
-            raise ValueError("Aeropuerto de origen no valido")
+            raise ValueError("El aeropuerto de origen no existe segun el Airport Service.")
         if not self._airport_validation.airport_exists(destination_airport_id):
-            raise ValueError("Aeropuerto de destino no valido")
+            raise ValueError("El aeropuerto de destino no existe segun el Airport Service.")

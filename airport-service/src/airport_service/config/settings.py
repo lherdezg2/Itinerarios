@@ -8,12 +8,20 @@ ALLOWED_HOSTS = ["*"]
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
+    "corsheaders",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
 ]
+
+# MVP (HU-A3): el mapa web se sirve en otro origen; en depuracion se permite cualquier origen.
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    CORS_ALLOWED_ORIGINS: list[str] = []
 
 ROOT_URLCONF = "airport_service.config.urls"
 TEMPLATES = []

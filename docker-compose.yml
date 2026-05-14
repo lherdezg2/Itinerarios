@@ -8,14 +8,32 @@ services:
     ports:
       - "8001:8001"
 
+  # HU-A3: frontend estatico (mapa); solo Nginx, sin logica de negocio.
+  airport-map-web:
+    image: nginx:1.25-alpine
+    container_name: airport-map-web
+    ports:
+      - "8080:80"
+    volumes:
+      - ./airport-map-web:/usr/share/nginx/html:ro
+    depends_on:
+      - airport-service
+
   itinerary-service:
     build:
       context: ./itinerary-service
     container_name: itinerary-service
     ports:
       - "8002:8002"
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: itineraries
+      POSTGRES_USER: itineraries_user
+      POSTGRES_PASSWORD: itineraries_pass
+      AIRPORT_SERVICE_BASE_URL: http://airport-service:8001
     depends_on:
       - db
+      - airport-service
 
   db:
     image: postgres:16-alpine

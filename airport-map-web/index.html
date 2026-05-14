@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mapa de aeropuertos (MVP)</title>
+    <!-- HU-A3/A4: datos solo desde Airport Service (?api=... opcional) -->
+    <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+    <style>
+      :root {
+        font-family: system-ui, sans-serif;
+        color: #0f172a;
+        background: #f8fafc;
+      }
+      body {
+        margin: 0 auto;
+        max-width: 960px;
+        padding: 1rem 1.25rem 2rem;
+      }
+      h1 {
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+      p.lead {
+        margin: 0 0 1rem;
+        color: #475569;
+        font-size: 0.95rem;
+      }
+      fieldset {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 0.75rem 1rem 1rem;
+        margin-bottom: 1rem;
+        background: #fff;
+      }
+      legend {
+        padding: 0 0.35rem;
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+      label {
+        display: block;
+        font-size: 0.85rem;
+        margin-bottom: 0.25rem;
+        color: #334155;
+      }
+      label.inline {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin-top: 0.35rem;
+        cursor: pointer;
+      }
+      input[type="text"] {
+        width: 100%;
+        max-width: 22rem;
+        padding: 0.45rem 0.5rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 0.95rem;
+      }
+      button {
+        margin-top: 0.5rem;
+        padding: 0.45rem 0.9rem;
+        border-radius: 6px;
+        border: none;
+        background: #1d4ed8;
+        color: #fff;
+        font-size: 0.9rem;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #1e40af;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      #status {
+        min-height: 1.25rem;
+        font-size: 0.85rem;
+        margin: 0.5rem 0 0.75rem;
+        color: #64748b;
+      }
+      #status.error {
+        color: #b91c1c;
+      }
+      #map {
+        width: 100%;
+        height: 480px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #fff;
+      }
+      .hint {
+        font-size: 0.8rem;
+        color: #94a3b8;
+        margin-top: 0.35rem;
+      }
+      #selection-summary {
+        font-size: 0.9rem;
+        line-height: 1.45;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        margin-bottom: 0.75rem;
+      }
+      #selection-summary .empty {
+        color: #94a3b8;
+      }
+      .pick-line {
+        margin-bottom: 0.35rem;
+      }
+      .pick-line .pick-value {
+        font-weight: 600;
+      }
+      .pick-origin .pick-value {
+        color: #15803d;
+      }
+      .pick-dest .pick-value {
+        color: #b91c1c;
+      }
+      #validation-message {
+        min-height: 1.25rem;
+        font-size: 0.9rem;
+        margin: 0.35rem 0 0.5rem;
+      }
+      #validation-message.ok {
+        color: #15803d;
+      }
+      #validation-message.err {
+        color: #b91c1c;
+      }
+      button.btn-secondary {
+        background: #475569;
+        margin-left: 0.5rem;
+      }
+      button.btn-secondary:hover:not(:disabled) {
+        background: #334155;
+      }
+      input[type="date"],
+      input[type="time"] {
+        max-width: 12rem;
+        padding: 0.45rem 0.5rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 0.95rem;
+      }
+      .readonly-field {
+        padding: 0.35rem 0;
+        font-weight: 600;
+        color: #334155;
+      }
+      #itinerary-result {
+        font-size: 0.85rem;
+        margin-top: 0.5rem;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Mapa, selección e itinerario (HU-A3 / HU-A4 / HU-A5 / HU-B1)</h1>
+    <p class="lead">
+      Aeropuertos desde el Airport Service. Selección y validación (HU-A4/HU-A5) solo en cliente. Creación de itinerario
+      (HU-B1) envía un POST al Itinerary Service, que valida aeropuertos vía Airport Service y persiste en base de datos.
+    </p>
+
+    <fieldset>
+      <legend>Búsqueda por nombre o ciudad</legend>
+      <label for="q">Texto</label>
+      <input id="q" type="text" placeholder="Ej. Bogotá, Cartagena" autocomplete="off" />
+      <div class="hint">Consume <code>GET /api/airports/search/?q=…</code></div>
+      <button type="button" id="btn-search">Buscar y mostrar en mapa</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Consulta por código IATA</legend>
+      <label for="iata">Código</label>
+      <input id="iata" type="text" maxlength="8" placeholder="Ej. BOG" autocomplete="off" />
+      <div class="hint">Consume <code>GET /api/airports/{id}/</code></div>
+      <button type="button" id="btn-by-id">Consultar y mostrar en mapa</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Selección en el mapa (HU-A4)</legend>
+      <p class="hint">Haz clic en un marcador. El aeropuerto se toma del listado ya obtenido del Airport Service (nombre, ciudad, coordenadas).</p>
+      <label class="inline">
+        <input type="radio" name="click-role" value="origin" checked />
+        Asignar próximo clic como <strong style="color: #15803d">origen</strong>
+      </label>
+      <label class="inline">
+        <input type="radio" name="click-role" value="destination" />
+        Asignar próximo clic como <strong style="color: #b91c1c">destino</strong>
+      </label>
+    </fieldset>
+
+    <div id="selection-summary" aria-live="polite">
+      <div class="empty">Origen y destino: aún no seleccionados (clic en un marcador del mapa).</div>
+    </div>
+
+    <fieldset>
+      <legend>Validación de selección (HU-A5)</legend>
+      <p class="hint">
+        Comprueba en cliente que existan origen y destino. No se envían datos al servidor ni se guarda información.
+      </p>
+      <button type="button" id="btn-validate-selection">Validar selección</button>
+      <button type="button" class="btn-secondary" id="btn-continue-step" disabled title="Valida primero con origen y destino completos">
+        Continuar (siguiente paso)
+      </button>
+      <div id="validation-message" role="status"></div>
+    </fieldset>
+
+    <div id="status" role="status"></div>
+    <div id="map" aria-label="Mapa interactivo de aeropuertos"></div>
+
+    <fieldset id="itinerary-create">
+      <legend>Crear itinerario (HU-B1)</legend>
+      <p class="hint">
+        Origen y destino se toman de la selección validada en el mapa. Opcional en URL: <code>?itinerary=http://localhost:8002</code>
+      </p>
+      <label for="itinerary-id">Identificador del itinerario</label>
+      <input id="itinerary-id" type="text" placeholder="Ej. ITI-001" autocomplete="off" />
+      <label for="travel-date">Fecha del viaje</label>
+      <input id="travel-date" type="date" />
+      <label for="start-time">Hora de inicio</label>
+      <input id="start-time" type="time" />
+      <label for="end-time">Hora de fin</label>
+      <input id="end-time" type="time" />
+      <label>Aeropuerto de origen (desde selección)</label>
+      <div id="itinerary-origin-display" class="readonly-field">—</div>
+      <label>Aeropuerto de destino (desde selección)</label>
+      <div id="itinerary-dest-display" class="readonly-field">—</div>
+      <button type="button" id="btn-create-itinerary" disabled>Crear itinerario (POST)</button>
+      <div id="itinerary-result" role="status"></div>
+    </fieldset>
+
+    <script>
+      (function () {
+        const params = new URLSearchParams(window.location.search);
+        const API_BASE = (params.get("api") || "http://localhost:8001").replace(/\/$/, "");
+        const ITINERARY_BASE = (params.get("itinerary") || "http://localhost:8002").replace(/\/$/, "");
+
+        const statusEl = document.getElementById("status");
+        const mapEl = document.getElementById("map");
+        const summaryEl = document.getElementById("selection-summary");
+        const validationMsgEl = document.getElementById("validation-message");
+        const btnContinue = document.getElementById("btn-continue-step");
+        const btnCreateItinerary = document.getElementById("btn-create-itinerary");
+        const itineraryResultEl = document.getElementById("itinerary-result");
+        const itineraryOriginDisplay = document.getElementById("itinerary-origin-display");
+        const itineraryDestDisplay = document.getElementById("itinerary-dest-display");
+
+        /** @type {Array<{ id: string, name: string, city: string, latitude: number, longitude: number }>} */
+        let currentAirports = [];
+        /** @type {{ id: string, name: string, city: string, latitude: number, longitude: number } | null} */
+        let selectedOrigin = null;
+        /** @type {{ id: string, name: string, city: string, latitude: number, longitude: number } | null} */
+        let selectedDestination = null;
+        /** HU-A5: solo true tras "Validar selección" con origen y destino presentes; se invalida al cambiar selección. */
+        let selectionValidationOk = false;
+
+        function todayIsoDate() {
+          const d = new Date();
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return y + "-" + m + "-" + day;
+        }
+
+        document.getElementById("travel-date").value = todayIsoDate();
+
+        function updateItineraryDisplays() {
+          const o = selectedOrigin;
+          const d = selectedDestination;
+          itineraryOriginDisplay.textContent = o ? formatAirportDisplay(o) : "—";
+          itineraryDestDisplay.textContent = d ? formatAirportDisplay(d) : "—";
+        }
+
+        function syncItineraryCreateButton() {
+          const idVal = document.getElementById("itinerary-id").value.trim();
+          const dateVal = document.getElementById("travel-date").value;
+          const t0 = document.getElementById("start-time").value;
+          const t1 = document.getElementById("end-time").value;
+          const o = selectedOrigin;
+          const d = selectedDestination;
+          const ready =
+            selectionValidationOk &&
+            Boolean(o) &&
+            Boolean(d) &&
+            idVal.length > 0 &&
+            dateVal.length > 0 &&
+            t0.length > 0 &&
+            t1.length > 0;
+          btnCreateItinerary.disabled = !ready;
+        }
+
+        function setStatus(message, isError) {
+          statusEl.textContent = message || "";
+          statusEl.classList.toggle("error", Boolean(isError));
+        }
+
+        /** Texto compacto: IATA – ciudad — nombre del aeropuerto */
+        function formatAirportDisplay(a) {
+          if (!a) {
+            return "(ninguno)";
+          }
+          const city = a.city || "—";
+          const name = a.name || "—";
+          return a.id + " – " + city + " — " + name;
+        }
+
+        function appendPickLine(container, className, labelText, airport) {
+          const row = document.createElement("div");
+          row.className = "pick-line " + className;
+          row.appendChild(document.createTextNode(labelText + " "));
+          const val = document.createElement("span");
+          val.className = "pick-value";
+          val.textContent = airport ? airport.city || airport.name : "(ninguno)";
+          row.appendChild(val);
+          container.appendChild(row);
+          const sub = document.createElement("div");
+          sub.className = "hint";
+          sub.style.marginTop = "0.15rem";
+          sub.textContent = airport ? formatAirportDisplay(airport) : "—";
+          container.appendChild(sub);
+        }
+
+        function updateSelectionSummary() {
+          summaryEl.replaceChildren();
+          const o = selectedOrigin;
+          const d = selectedDestination;
+          if (!o && !d) {
+            const hint = document.createElement("div");
+            hint.className = "empty";
+            hint.textContent = "Origen y destino: aún no seleccionados (clic en un marcador del mapa).";
+            summaryEl.appendChild(hint);
+            updateItineraryDisplays();
+            syncItineraryCreateButton();
+            return;
+          }
+          appendPickLine(summaryEl, "pick-origin", "Origen seleccionado:", o);
+          appendPickLine(summaryEl, "pick-dest", "Destino seleccionado:", d);
+          updateItineraryDisplays();
+          syncItineraryCreateButton();
+        }
+
+        function setValidationMessage(text, kind) {
+          validationMsgEl.textContent = text || "";
+          validationMsgEl.classList.remove("ok", "err");
+          if (kind === "ok") {
+            validationMsgEl.classList.add("ok");
+          } else if (kind === "err") {
+            validationMsgEl.classList.add("err");
+          }
+        }
+
+        function invalidateValidation(reason) {
+          selectionValidationOk = false;
+          btnContinue.disabled = true;
+          btnContinue.title = "Valida primero con origen y destino completos";
+          syncItineraryCreateButton();
+          if (reason === "silent") {
+            itineraryResultEl.textContent = "";
+            return;
+          }
+          if (reason === "selection-changed") {
+            setValidationMessage("La selección cambió. Vuelve a validar antes de continuar.", "err");
+          } else {
+            setValidationMessage("", "");
+          }
+        }
+
+        function syncContinueAfterValidation() {
+          btnContinue.disabled = !selectionValidationOk;
+          btnContinue.title = selectionValidationOk
+            ? "Pasa al formulario de itinerario (HU-B1)."
+            : "Valida primero con origen y destino completos";
+          syncItineraryCreateButton();
+        }
+
+        function runValidateSelection() {
+          const o = selectedOrigin;
+          const d = selectedDestination;
+          if (!o && !d) {
+            setValidationMessage(
+              "Selecciona un aeropuerto de origen y uno de destino en el mapa antes de validar.",
+              "err"
+            );
+            selectionValidationOk = false;
+            syncContinueAfterValidation();
+            return;
+          }
+          if (!o) {
+            setValidationMessage("Falta un aeropuerto de origen. Elige origen en el mapa y vuelve a validar.", "err");
+            selectionValidationOk = false;
+            syncContinueAfterValidation();
+            return;
+          }
+          if (!d) {
+            setValidationMessage(
+              "Falta un aeropuerto de destino. Elige destino en el mapa y vuelve a validar.",
+              "err"
+            );
+            selectionValidationOk = false;
+            syncContinueAfterValidation();
+            return;
+          }
+          setValidationMessage("Selección válida: puede continuar", "ok");
+          selectionValidationOk = true;
+          syncContinueAfterValidation();
+        }
+
+        function defaultLayout(title) {
+          return {
+            title: title ? { text: title, font: { size: 15 } } : undefined,
+            geo: {
+              scope: "south america",
+              showland: true,
+              landcolor: "#eef2ff",
+              coastlinecolor: "#94a3b8",
+              countrycolor: "#cbd5e1",
+              bgcolor: "#f8fafc",
+            },
+            margin: { t: title ? 48 : 24, l: 0, r: 0, b: 0 },
+            dragmode: "pan",
+          };
+        }
+
+        const plotConfig = { scrollZoom: true, responsive: true, displaylogo: false };
+
+        function markerStyles(airports) {
+          const colors = [];
+          const sizes = [];
+          for (let i = 0; i < airports.length; i++) {
+            const a = airports[i];
+            if (selectedOrigin && a.id === selectedOrigin.id) {
+              colors.push("#16a34a");
+              sizes.push(14);
+            } else if (selectedDestination && a.id === selectedDestination.id) {
+              colors.push("#dc2626");
+              sizes.push(14);
+            } else {
+              colors.push("#1d4ed8");
+              sizes.push(11);
+            }
+          }
+          return { colors: colors, sizes: sizes };
+        }
+
+        function onMapClick(ev) {
+          if (!currentAirports.length) {
+            return;
+          }
+          const pt = ev.points && ev.points[0];
+          if (!pt || typeof pt.pointIndex !== "number") {
+            return;
+          }
+          const airport = currentAirports[pt.pointIndex];
+          if (!airport) {
+            return;
+          }
+          const roleInput = document.querySelector('input[name="click-role"]:checked');
+          const role = roleInput ? roleInput.value : "origin";
+          const copy = {
+            id: airport.id,
+            name: airport.name,
+            city: airport.city,
+            latitude: airport.latitude,
+            longitude: airport.longitude,
+          };
+          if (role === "origin") {
+            selectedOrigin = copy;
+          } else {
+            selectedDestination = copy;
+          }
+          updateSelectionSummary();
+          invalidateValidation("selection-changed");
+          itineraryResultEl.textContent = "";
+          setStatus(
+            "Selección actualizada en cliente (sin llamadas nuevas al servidor). Marcadores: verde = origen, rojo = destino, azul = resto."
+          );
+          redrawMap();
+        }
+
+        function redrawMap() {
+          if (!currentAirports.length) {
+            return;
+          }
+          const styles = markerStyles(currentAirports);
+          const trace = {
+            type: "scattergeo",
+            mode: "markers",
+            lon: currentAirports.map(function (a) {
+              return a.longitude;
+            }),
+            lat: currentAirports.map(function (a) {
+              return a.latitude;
+            }),
+            text: currentAirports.map(function (a) {
+              return a.name + " (" + a.id + ")<br>" + a.city;
+            }),
+            hoverinfo: "text",
+            marker: {
+              size: styles.sizes,
+              color: styles.colors,
+              line: { width: 1, color: "#fff" },
+            },
+          };
+          const layout = defaultLayout("Ubicación geográfica");
+          layout.geo.fitbounds = "locations";
+          if (typeof Plotly.purge === "function") {
+            Plotly.purge(mapEl);
+          }
+          const drawn = Plotly.newPlot(mapEl, [trace], layout, plotConfig);
+          if (drawn && typeof drawn.then === "function") {
+            drawn.then(function () {
+              mapEl.on("plotly_click", onMapClick);
+            });
+          } else {
+            mapEl.on("plotly_click", onMapClick);
+          }
+        }
+
+        function renderEmptyMap(message, options) {
+          const preserveStatus = options && options.preserveStatus;
+          currentAirports = [];
+          selectedOrigin = null;
+          selectedDestination = null;
+          updateSelectionSummary();
+          invalidateValidation("silent");
+          setValidationMessage("", "");
+          itineraryResultEl.textContent = "";
+          if (!preserveStatus) {
+            setStatus(message);
+          }
+          if (typeof Plotly.purge === "function") {
+            Plotly.purge(mapEl);
+          }
+          Plotly.newPlot(mapEl, [], defaultLayout("Sin puntos en el mapa"), plotConfig);
+        }
+
+        function renderAirports(airports) {
+          if (!airports.length) {
+            renderEmptyMap("Sin resultados: lista vacía (no es error).");
+            return;
+          }
+          currentAirports = airports.slice();
+          selectedOrigin = null;
+          selectedDestination = null;
+          updateSelectionSummary();
+          invalidateValidation("silent");
+          setValidationMessage("", "");
+          itineraryResultEl.textContent = "";
+          setStatus(
+            "Mostrando " +
+              currentAirports.length +
+              " aeropuerto(s). Clic en un marcador para origen o destino (solo datos ya cargados)."
+          );
+          redrawMap();
+        }
+
+        async function fetchJson(url) {
+          const res = await fetch(url);
+          const text = await res.text();
+          let data;
+          try {
+            data = text ? JSON.parse(text) : null;
+          } catch (e) {
+            throw new Error("Respuesta no JSON del Airport Service.");
+          }
+          if (!res.ok) {
+            const detail = data && data.detail ? data.detail : res.statusText;
+            throw new Error(detail || "Error HTTP " + res.status);
+          }
+          return data;
+        }
+
+        document.getElementById("btn-search").addEventListener("click", async function () {
+          const q = document.getElementById("q").value.trim();
+          const btn = document.getElementById("btn-search");
+          btn.disabled = true;
+          setStatus("Cargando…");
+          try {
+            const url = API_BASE + "/api/airports/search/?q=" + encodeURIComponent(q);
+            const data = await fetchJson(url);
+            if (!Array.isArray(data)) {
+              throw new Error("Formato inesperado: se esperaba un arreglo.");
+            }
+            renderAirports(data);
+          } catch (err) {
+            setStatus(err.message || String(err), true);
+            renderEmptyMap("", { preserveStatus: true });
+          } finally {
+            btn.disabled = false;
+          }
+        });
+
+        document.getElementById("btn-by-id").addEventListener("click", async function () {
+          const id = document.getElementById("iata").value.trim().toUpperCase();
+          const btn = document.getElementById("btn-by-id");
+          btn.disabled = true;
+          setStatus("Cargando…");
+          try {
+            if (!id) {
+              renderEmptyMap("Indica un código IATA.");
+              return;
+            }
+            const url = API_BASE + "/api/airports/" + encodeURIComponent(id) + "/";
+            const data = await fetchJson(url);
+            renderAirports([data]);
+          } catch (err) {
+            setStatus(err.message || String(err), true);
+            renderEmptyMap("", { preserveStatus: true });
+          } finally {
+            btn.disabled = false;
+          }
+        });
+
+        document.getElementById("btn-validate-selection").addEventListener("click", function () {
+          runValidateSelection();
+        });
+
+        document.getElementById("btn-continue-step").addEventListener("click", function () {
+          if (!selectionValidationOk) {
+            return;
+          }
+          const panel = document.getElementById("itinerary-create");
+          if (panel && panel.scrollIntoView) {
+            panel.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+          setStatus("Completa identificador, fecha y horas; luego usa Crear itinerario (POST al Itinerary Service).", false);
+        });
+
+        ["itinerary-id", "travel-date", "start-time", "end-time"].forEach(function (id) {
+          document.getElementById(id).addEventListener("input", syncItineraryCreateButton);
+          document.getElementById(id).addEventListener("change", syncItineraryCreateButton);
+        });
+
+        document.getElementById("btn-create-itinerary").addEventListener("click", async function () {
+          const o = selectedOrigin;
+          const d = selectedDestination;
+          if (!selectionValidationOk || !o || !d) {
+            return;
+          }
+          const itineraryId = document.getElementById("itinerary-id").value.trim();
+          const travelDate = document.getElementById("travel-date").value;
+          const startTime = document.getElementById("start-time").value;
+          const endTime = document.getElementById("end-time").value;
+          const btn = document.getElementById("btn-create-itinerary");
+          btn.disabled = true;
+          itineraryResultEl.textContent = "Enviando…";
+          try {
+            const url = ITINERARY_BASE + "/api/itineraries/";
+            const body = {
+              itinerary_id: itineraryId,
+              origin_airport_id: o.id,
+              destination_airport_id: d.id,
+              travel_date: travelDate,
+              start_time: startTime.length === 5 ? startTime + ":00" : startTime,
+              end_time: endTime.length === 5 ? endTime + ":00" : endTime,
+            };
+            const res = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+            const text = await res.text();
+            let data;
+            try {
+              data = text ? JSON.parse(text) : null;
+            } catch (e) {
+              throw new Error("Respuesta no JSON del Itinerary Service.");
+            }
+            if (!res.ok) {
+              const detail = data && data.detail ? data.detail : res.statusText;
+              throw new Error(detail || "Error HTTP " + res.status);
+            }
+            itineraryResultEl.textContent = "Creado: " + JSON.stringify(data, null, 2);
+            setStatus("Itinerario creado (201).", false);
+          } catch (err) {
+            itineraryResultEl.textContent = "Error: " + (err.message || String(err));
+            setStatus("Fallo al crear itinerario.", true);
+          } finally {
+            syncItineraryCreateButton();
+          }
+        });
+
+        renderEmptyMap("Busca o consulta un aeropuerto para ver el mapa.");
+        updateItineraryDisplays();
+        syncItineraryCreateButton();
+      })();
+    </script>
+  </body>
+</html>

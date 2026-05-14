@@ -10,8 +10,9 @@ class ItineraryCommandPort(ABC):
         itinerary_id: str,
         origin_airport_id: str,
         destination_airport_id: str,
-        start_date_iso: str,
-        end_date_iso: str,
+        travel_date_iso: str,
+        start_time_iso: str,
+        end_time_iso: str,
     ) -> Itinerary:
         raise NotImplementedError
 
