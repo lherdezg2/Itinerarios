@@ -32,12 +32,8 @@ def create_itinerary(request):
         )
         return JsonResponse(
             {
+                "message": "Itinerario creado correctamente",
                 "itinerary_id": itinerary.itinerary_id,
-                "origin_airport_id": itinerary.origin_airport_id,
-                "destination_airport_id": itinerary.destination_airport_id,
-                "travel_date": itinerary.travel_date.isoformat(),
-                "start_time": itinerary.start_time.strftime("%H:%M"),
-                "end_time": itinerary.end_time.strftime("%H:%M"),
             },
             status=201,
         )

@@ -10,6 +10,7 @@ from itinerary_service.application.ports.outbound.itinerary_repository_port impo
     ItineraryRepositoryPort,
 )
 from itinerary_service.domain.itinerary import Itinerary
+from itinerary_service.domain.schedule_overlap import same_day_time_intervals_overlap
 
 
 class ItineraryService(ItineraryCommandPort):
@@ -30,15 +31,28 @@ class ItineraryService(ItineraryCommandPort):
         start_time_iso: str,
         end_time_iso: str,
     ) -> Itinerary:
-        self._validate_airports(origin_airport_id, destination_airport_id)
-        travel_date = date.fromisoformat(travel_date_iso)
-        start_time = time.fromisoformat(start_time_iso)
-        end_time = time.fromisoformat(end_time_iso)
+        itinerary_id_clean = itinerary_id.strip()
+        if not itinerary_id_clean:
+            raise ValueError("El identificador del itinerario es obligatorio.")
+
+        origin = (origin_airport_id or "").strip().upper()
+        destination = (destination_airport_id or "").strip().upper()
+        if not origin:
+            raise ValueError("El aeropuerto de origen es obligatorio.")
+        if not destination:
+            raise ValueError("El aeropuerto de destino es obligatorio.")
+
+        travel_date = self._parse_date(travel_date_iso)
+        start_time = self._parse_time(start_time_iso)
+        end_time = self._parse_time(end_time_iso)
+
+        self._validate_airports(origin, destination)
+        self._ensure_no_overlap(travel_date, start_time, end_time)
 
         itinerary = Itinerary(
-            itinerary_id=itinerary_id.strip(),
-            origin_airport_id=origin_airport_id.strip().upper(),
-            destination_airport_id=destination_airport_id.strip().upper(),
+            itinerary_id=itinerary_id_clean,
+            origin_airport_id=origin,
+            destination_airport_id=destination,
             travel_date=travel_date,
             start_time=start_time,
             end_time=end_time,
@@ -49,8 +63,37 @@ class ItineraryService(ItineraryCommandPort):
     def list_itineraries(self) -> list[Itinerary]:
         return self._itinerary_repository.list_all()
 
+    def _parse_date(self, value: str) -> date:
+        raw = (value or "").strip()
+        if not raw:
+            raise ValueError("La fecha del viaje es obligatoria.")
+        return date.fromisoformat(raw)
+
+    def _parse_time(self, value: str) -> time:
+        """Acepta 'HH:MM' y 'HH:MM:SS' (y variantes con microsegundos que fromisoformat permita)."""
+        v = (value or "").strip()
+        if not v:
+            raise ValueError("La hora es obligatoria.")
+        if len(v) == 5 and v[2] == ":":
+            v = v + ":00"
+        return time.fromisoformat(v)
+
     def _validate_airports(self, origin_airport_id: str, destination_airport_id: str) -> None:
         if not self._airport_validation.airport_exists(origin_airport_id):
             raise ValueError("El aeropuerto de origen no existe segun el Airport Service.")
         if not self._airport_validation.airport_exists(destination_airport_id):
             raise ValueError("El aeropuerto de destino no existe segun el Airport Service.")
+
+    def _ensure_no_overlap(self, travel_date: date, start_time: time, end_time: time) -> None:
+        for existing in self._itinerary_repository.list_all():
+            if same_day_time_intervals_overlap(
+                existing.travel_date,
+                existing.start_time,
+                existing.end_time,
+                travel_date,
+                start_time,
+                end_time,
+            ):
+                raise ValueError(
+                    "El itinerario se solapa en fecha y horario con otro itinerario existente."
+                )

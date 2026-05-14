@@ -6,7 +6,8 @@ Proyecto base para Ingenieria de Software II con arquitectura de microservicios 
 
 - `airport-service`: microservicio de consulta de aeropuertos.
 - `itinerary-service`: microservicio de gestion de itinerarios.
-- `docker-compose.yml`: levanta ambos servicios y base de datos.
+- `airport-map-web`: frontend estatico (mapa, seleccion, validacion cliente y creacion de itinerario).
+- `docker-compose.yml`: levanta servicios, base de datos y mapa web.
 
 ## Arquitectura aplicada
 
@@ -32,6 +33,7 @@ Servicios:
 
 - Airport Service: http://localhost:8001/api/airports/
 - Itinerary Service: http://localhost:8002/api/itineraries/
+- Mapa web (HU-A3+): http://localhost:8080/
 
 ## Endpoints base MVP
 
@@ -52,10 +54,22 @@ Ejemplo de body para crear itinerario:
   "itinerary_id": "ITI-001",
   "origin_airport_id": "BOG",
   "destination_airport_id": "MDE",
-  "start_date": "2026-04-20",
-  "end_date": "2026-04-23"
+  "travel_date": "2026-04-20",
+  "start_time": "08:30",
+  "end_time": "10:00"
 }
 ```
+
+Las horas pueden enviarse como `HH:MM` o `HH:MM:SS`. Respuesta exitosa (201):
+
+```json
+{
+  "message": "Itinerario creado correctamente",
+  "itinerary_id": "ITI-001"
+}
+```
+
+El Itinerary Service valida que los aeropuertos existan consultando el Airport Service y rechaza itinerarios que se solapen en la misma fecha (cruce de intervalos de hora).
 
 ## Alcance
 
