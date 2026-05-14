@@ -60,16 +60,17 @@ Ejemplo de body para crear itinerario:
 }
 ```
 
-Las horas pueden enviarse como `HH:MM` o `HH:MM:SS`. Respuesta exitosa (201):
+Las horas pueden enviarse como `HH:MM` o `HH:MM:SS`. La hora final debe ser estrictamente mayor que la inicial. Al crear, el estado inicial es **Pendiente** (HU-B3). Respuesta exitosa (201):
 
 ```json
 {
   "message": "Itinerario creado correctamente",
-  "itinerary_id": "ITI-001"
+  "itinerary_id": "ITI-001",
+  "status": "Pendiente"
 }
 ```
 
-El Itinerary Service valida que los aeropuertos existan consultando el Airport Service y rechaza itinerarios que se solapen en la misma fecha (cruce de intervalos de hora).
+El Itinerary Service valida que los aeropuertos existan consultando el Airport Service, rechaza `end_time <= start_time` y rechaza itinerarios que se solapen en la misma fecha (mensaje: «El itinerario se solapa con otro existente»). El listado (`GET .../list/`) incluye el campo `status`.
 
 ## Alcance
 

@@ -9,7 +9,7 @@ from itinerary_service.application.ports.outbound.airport_validation_port import
 from itinerary_service.application.ports.outbound.itinerary_repository_port import (
     ItineraryRepositoryPort,
 )
-from itinerary_service.domain.itinerary import Itinerary
+from itinerary_service.domain.itinerary import Itinerary, new_itinerary_pending
 from itinerary_service.domain.schedule_overlap import same_day_time_intervals_overlap
 
 
@@ -46,10 +46,13 @@ class ItineraryService(ItineraryCommandPort):
         start_time = self._parse_time(start_time_iso)
         end_time = self._parse_time(end_time_iso)
 
+        if end_time <= start_time:
+            raise ValueError("La hora final debe ser mayor que la inicial")
+
         self._validate_airports(origin, destination)
         self._ensure_no_overlap(travel_date, start_time, end_time)
 
-        itinerary = Itinerary(
+        itinerary = new_itinerary_pending(
             itinerary_id=itinerary_id_clean,
             origin_airport_id=origin,
             destination_airport_id=destination,
@@ -85,7 +88,7 @@ class ItineraryService(ItineraryCommandPort):
             raise ValueError("El aeropuerto de destino no existe segun el Airport Service.")
 
     def _ensure_no_overlap(self, travel_date: date, start_time: time, end_time: time) -> None:
-        for existing in self._itinerary_repository.list_all():
+        for existing in self._itinerary_repository.get_by_date(travel_date):
             if same_day_time_intervals_overlap(
                 existing.travel_date,
                 existing.start_time,
@@ -94,6 +97,4 @@ class ItineraryService(ItineraryCommandPort):
                 start_time,
                 end_time,
             ):
-                raise ValueError(
-                    "El itinerario se solapa en fecha y horario con otro itinerario existente."
-                )
+                raise ValueError("El itinerario se solapa con otro existente")

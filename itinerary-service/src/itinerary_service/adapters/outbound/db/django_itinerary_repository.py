@@ -1,8 +1,10 @@
+from datetime import date
+
 from itinerary_service.adapters.outbound.db.models import ItineraryRecord
 from itinerary_service.application.ports.outbound.itinerary_repository_port import (
     ItineraryRepositoryPort,
 )
-from itinerary_service.domain.itinerary import Itinerary
+from itinerary_service.domain.itinerary import Itinerary, ItineraryStatus
 
 
 class DjangoItineraryRepository(ItineraryRepositoryPort):
@@ -15,11 +17,16 @@ class DjangoItineraryRepository(ItineraryRepositoryPort):
                 "travel_date": itinerary.travel_date,
                 "start_time": itinerary.start_time,
                 "end_time": itinerary.end_time,
+                "status": itinerary.status.value,
             },
         )
 
     def list_all(self) -> list[Itinerary]:
         rows = ItineraryRecord.objects.all().order_by("itinerary_id")
+        return [_to_domain(row) for row in rows]
+
+    def get_by_date(self, travel_date: date) -> list[Itinerary]:
+        rows = ItineraryRecord.objects.filter(travel_date=travel_date).order_by("itinerary_id")
         return [_to_domain(row) for row in rows]
 
 
@@ -31,4 +38,5 @@ def _to_domain(row: ItineraryRecord) -> Itinerary:
         travel_date=row.travel_date,
         start_time=row.start_time,
         end_time=row.end_time,
+        status=ItineraryStatus(row.status),
     )

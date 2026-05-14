@@ -673,14 +673,18 @@
               throw new Error("Respuesta no JSON del Itinerary Service.");
             }
             if (!res.ok) {
-              const detail = data && data.detail ? data.detail : res.statusText;
+              let detail = data && data.detail ? data.detail : res.statusText;
+              if (detail && String(detail).toLowerCase().indexOf("solapa") !== -1) {
+                detail = "El itinerario se solapa con otro existente";
+              }
               throw new Error(detail || "Error HTTP " + res.status);
             }
             itineraryResultEl.textContent = "Creado: " + JSON.stringify(data, null, 2);
             setStatus("Itinerario creado (201).", false);
           } catch (err) {
-            itineraryResultEl.textContent = "Error: " + (err.message || String(err));
-            setStatus("Fallo al crear itinerario.", true);
+            const em = err.message || String(err);
+            itineraryResultEl.textContent = "Error: " + em;
+            setStatus(em, true);
           } finally {
             syncItineraryCreateButton();
           }

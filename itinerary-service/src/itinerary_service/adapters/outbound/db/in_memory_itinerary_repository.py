@@ -1,3 +1,5 @@
+from datetime import date
+
 from itinerary_service.application.ports.outbound.itinerary_repository_port import (
     ItineraryRepositoryPort,
 )
@@ -9,7 +11,11 @@ class InMemoryItineraryRepository(ItineraryRepositoryPort):
         self._items: list[Itinerary] = []
 
     def save(self, itinerary: Itinerary) -> None:
+        self._items = [i for i in self._items if i.itinerary_id != itinerary.itinerary_id]
         self._items.append(itinerary)
 
     def list_all(self) -> list[Itinerary]:
         return list(self._items)
+
+    def get_by_date(self, travel_date: date) -> list[Itinerary]:
+        return [i for i in self._items if i.travel_date == travel_date]

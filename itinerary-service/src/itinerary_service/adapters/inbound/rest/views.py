@@ -34,6 +34,7 @@ def create_itinerary(request):
             {
                 "message": "Itinerario creado correctamente",
                 "itinerary_id": itinerary.itinerary_id,
+                "status": itinerary.status.value,
             },
             status=201,
         )
@@ -54,6 +55,7 @@ def list_itineraries(request):
             "travel_date": item.travel_date.isoformat(),
             "start_time": item.start_time.strftime("%H:%M"),
             "end_time": item.end_time.strftime("%H:%M"),
+            "status": item.status.value,
         }
         for item in items
     ]
