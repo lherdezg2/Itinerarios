@@ -16,3 +16,7 @@ class ItineraryRepositoryPort(ABC):
     @abstractmethod
     def get_by_date(self, travel_date: date) -> list[Itinerary]:
         raise NotImplementedError
+
+    @abstractmethod
+    def get_by_itinerary_id(self, itinerary_id: str) -> Itinerary | None:
+        raise NotImplementedError

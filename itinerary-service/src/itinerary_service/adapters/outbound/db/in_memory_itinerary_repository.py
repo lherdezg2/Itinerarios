@@ -19,3 +19,9 @@ class InMemoryItineraryRepository(ItineraryRepositoryPort):
 
     def get_by_date(self, travel_date: date) -> list[Itinerary]:
         return [i for i in self._items if i.travel_date == travel_date]
+
+    def get_by_itinerary_id(self, itinerary_id: str) -> Itinerary | None:
+        for item in self._items:
+            if item.itinerary_id == itinerary_id:
+                return item
+        return None

@@ -66,6 +66,12 @@ class ItineraryService(ItineraryCommandPort):
     def list_itineraries(self) -> list[Itinerary]:
         return self._itinerary_repository.list_all()
 
+    def get_itinerary_by_id(self, itinerary_id: str) -> Itinerary | None:
+        cleaned = (itinerary_id or "").strip()
+        if not cleaned:
+            return None
+        return self._itinerary_repository.get_by_itinerary_id(cleaned)
+
     def _parse_date(self, value: str) -> date:
         raw = (value or "").strip()
         if not raw:

@@ -29,6 +29,13 @@ class DjangoItineraryRepository(ItineraryRepositoryPort):
         rows = ItineraryRecord.objects.filter(travel_date=travel_date).order_by("itinerary_id")
         return [_to_domain(row) for row in rows]
 
+    def get_by_itinerary_id(self, itinerary_id: str) -> Itinerary | None:
+        try:
+            row = ItineraryRecord.objects.get(itinerary_id=itinerary_id)
+        except ItineraryRecord.DoesNotExist:
+            return None
+        return _to_domain(row)
+
 
 def _to_domain(row: ItineraryRecord) -> Itinerary:
     return Itinerary(

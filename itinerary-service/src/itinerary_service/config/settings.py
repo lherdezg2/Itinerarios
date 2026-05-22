@@ -15,6 +15,7 @@ ALLOWED_HOSTS = ["*"]
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
+    "rest_framework",
     "corsheaders",
     "itinerary_service.adapters.outbound.db",
 ]
@@ -25,10 +26,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
 ]
 
-if DEBUG:
-    CORS_ALLOW_ALL_ORIGINS = True
-else:
-    CORS_ALLOWED_ORIGINS: list[str] = []
+# MVP: frontend en http://localhost:8080 (nginx) consume APIs en :8001 / :8002.
+CORS_ALLOW_ALL_ORIGINS = True
 
 ROOT_URLCONF = "itinerary_service.config.urls"
 TEMPLATES = []

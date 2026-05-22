@@ -1,8 +1,12 @@
 from django.urls import path
 
-from itinerary_service.adapters.inbound.rest.views import create_itinerary, list_itineraries
+from itinerary_service.adapters.inbound.rest.views import (
+    ItineraryDetailApiView,
+    ItineraryListCreateApiView,
+)
 
 urlpatterns = [
-    path("", create_itinerary, name="create-itinerary"),
-    path("list/", list_itineraries, name="list-itineraries"),
+    path("", ItineraryListCreateApiView.as_view(), name="itineraries"),
+    path("list/", ItineraryListCreateApiView.as_view(), name="list-itineraries"),
+    path("<str:itinerary_id>/", ItineraryDetailApiView.as_view(), name="itinerary-detail"),
 ]

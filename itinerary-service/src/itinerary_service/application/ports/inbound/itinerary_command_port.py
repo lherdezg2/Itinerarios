@@ -19,3 +19,7 @@ class ItineraryCommandPort(ABC):
     @abstractmethod
     def list_itineraries(self) -> list[Itinerary]:
         raise NotImplementedError
+
+    @abstractmethod
+    def get_itinerary_by_id(self, itinerary_id: str) -> Itinerary | None:
+        raise NotImplementedError
