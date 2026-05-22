@@ -1,9 +1,15 @@
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-SECRET_KEY = "academic-itinerary-service-secret"
 DEBUG = True
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-insecure-key")
+if not DEBUG and not os.getenv("DJANGO_SECRET_KEY"):
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY debe estar definida en produccion (DEBUG=False)."
+    )
 ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
