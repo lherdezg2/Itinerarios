@@ -46,6 +46,7 @@ Itinerary Service:
 
 - `GET /api/itineraries/` — listar todos los itinerarios (HU-C1)
 - `GET /api/itineraries/{itinerary_id}/` — consultar uno por ID (HU-C2)
+- `PATCH /api/itineraries/{itinerary_id}/status/` — cambiar estado (HU-C3)
 - `POST /api/itineraries/` — crear itinerario
 - `GET /api/itineraries/list/` — alias del listado (compatibilidad)
 
@@ -61,10 +62,18 @@ Ejemplo de respuesta del listado (200):
     "end_date": "2026-04-20",
     "start_time": "08:30:00",
     "end_time": "10:00:00",
-    "status": "Pendiente"
+    "status": "PENDING"
   }
 ]
 ```
+
+Cambio de estado (PATCH, body):
+
+```json
+{ "status": "IN_PROGRESS" }
+```
+
+Valores permitidos: `PENDING`, `IN_PROGRESS`, `COMPLETED`. Transiciones validas: Pendiente→En curso, Pendiente→Completado, En curso→Completado. Desde `COMPLETED` no se permite cambiar.
 
 En el MVP de un solo día de viaje, `start_date` y `end_date` coinciden con la fecha almacenada (`travel_date` al crear).
 

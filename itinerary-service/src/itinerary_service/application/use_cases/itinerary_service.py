@@ -1,5 +1,7 @@
+from dataclasses import replace
 from datetime import date, time
 
+from itinerary_service.application.exceptions import ItineraryNotFoundError
 from itinerary_service.application.ports.inbound.itinerary_command_port import (
     ItineraryCommandPort,
 )
@@ -9,8 +11,11 @@ from itinerary_service.application.ports.outbound.airport_validation_port import
 from itinerary_service.application.ports.outbound.itinerary_repository_port import (
     ItineraryRepositoryPort,
 )
+from itinerary_service.application.status_codes import parse_api_status
 from itinerary_service.domain.itinerary import Itinerary, new_itinerary_pending
+from itinerary_service.domain.itinerary_id import normalize_itinerary_id
 from itinerary_service.domain.schedule_overlap import same_day_time_intervals_overlap
+from itinerary_service.domain.status_transitions import apply_status_change
 
 
 class ItineraryService(ItineraryCommandPort):
@@ -67,10 +72,31 @@ class ItineraryService(ItineraryCommandPort):
         return self._itinerary_repository.list_all()
 
     def get_itinerary_by_id(self, itinerary_id: str) -> Itinerary | None:
-        cleaned = (itinerary_id or "").strip()
-        if not cleaned:
+        cleaned = self._normalize_itinerary_id(itinerary_id)
+        if cleaned is None:
             return None
         return self._itinerary_repository.get_by_itinerary_id(cleaned)
+
+    def update_status(self, itinerary_id: str, new_status_code: str) -> Itinerary:
+        cleaned_id = self._normalize_itinerary_id(itinerary_id)
+        if cleaned_id is None:
+            raise ItineraryNotFoundError("Itinerario no encontrado.")
+
+        itinerary = self._itinerary_repository.get_by_itinerary_id(cleaned_id)
+        if itinerary is None:
+            raise ItineraryNotFoundError("Itinerario no encontrado.")
+
+        new_status = parse_api_status(new_status_code)
+        apply_status_change(itinerary.status, new_status)
+        updated = replace(itinerary, status=new_status)
+        self._itinerary_repository.save(updated)
+        return updated
+
+    def _normalize_itinerary_id(self, itinerary_id: str | None) -> str | None:
+        try:
+            return normalize_itinerary_id(itinerary_id)
+        except ValueError:
+            return None
 
     def _parse_date(self, value: str) -> date:
         raw = (value or "").strip()

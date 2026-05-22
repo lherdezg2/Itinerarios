@@ -23,3 +23,7 @@ class ItineraryCommandPort(ABC):
     @abstractmethod
     def get_itinerary_by_id(self, itinerary_id: str) -> Itinerary | None:
         raise NotImplementedError
+
+    @abstractmethod
+    def update_status(self, itinerary_id: str, new_status_code: str) -> Itinerary:
+        raise NotImplementedError
