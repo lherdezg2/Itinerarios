@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 from itinerary_service.domain.itinerary import Itinerary
+from itinerary_service.domain.itinerary_summary import ItinerarySummary
 
 
 class ItineraryCommandPort(ABC):
@@ -34,4 +35,8 @@ class ItineraryCommandPort(ABC):
 
     @abstractmethod
     def update_itinerary(self, itinerary_id: str, data: dict) -> Itinerary:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_itinerary_summary(self) -> ItinerarySummary:
         raise NotImplementedError

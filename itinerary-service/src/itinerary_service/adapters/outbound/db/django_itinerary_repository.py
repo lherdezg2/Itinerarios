@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 
 from itinerary_service.adapters.outbound.db.models import ItineraryRecord
 from itinerary_service.application.ports.outbound.itinerary_repository_port import (
@@ -18,6 +19,7 @@ class DjangoItineraryRepository(ItineraryRepositoryPort):
                 "start_time": itinerary.start_time,
                 "end_time": itinerary.end_time,
                 "status": itinerary.status.value,
+                "value": itinerary.value,
             },
         )
 
@@ -49,4 +51,5 @@ def _to_domain(row: ItineraryRecord) -> Itinerary:
         start_time=row.start_time,
         end_time=row.end_time,
         status=ItineraryStatus(row.status),
+        value=Decimal(row.value),
     )

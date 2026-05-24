@@ -4,11 +4,13 @@ from itinerary_service.adapters.inbound.rest.views import (
     ItineraryDetailApiView,
     ItineraryListCreateApiView,
     ItineraryStatusUpdateApiView,
+    ItinerarySummaryApiView,
 )
 
 urlpatterns = [
     path("", ItineraryListCreateApiView.as_view(), name="itineraries"),
     path("list/", ItineraryListCreateApiView.as_view(), name="list-itineraries"),
+    path("summary/", ItinerarySummaryApiView.as_view(), name="itinerary-summary"),
     path(
         "<str:itinerary_id>/status/",
         ItineraryStatusUpdateApiView.as_view(),

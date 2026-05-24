@@ -1,5 +1,6 @@
 from dataclasses import replace
 from datetime import date, time
+from decimal import Decimal
 
 from itinerary_service.application.exceptions import ItineraryNotFoundError
 from itinerary_service.application.ports.inbound.itinerary_command_port import (
@@ -12,10 +13,17 @@ from itinerary_service.application.ports.outbound.itinerary_repository_port impo
     ItineraryRepositoryPort,
 )
 from itinerary_service.application.itinerary_edit_rules import ensure_itinerary_editable
-from itinerary_service.application.status_codes import parse_api_status
+from itinerary_service.application.status_codes import (
+    API_STATUS_COMPLETED,
+    API_STATUS_IN_PROGRESS,
+    API_STATUS_PENDING,
+    parse_api_status,
+    status_to_api,
+)
 from itinerary_service.application.status_transitions import ensure_valid_status_transition
 from itinerary_service.domain.itinerary import Itinerary, new_itinerary_pending
 from itinerary_service.domain.itinerary_id import normalize_itinerary_id
+from itinerary_service.domain.itinerary_summary import ItinerarySummary
 from itinerary_service.domain.schedule_overlap import same_day_time_intervals_overlap
 
 
@@ -172,6 +180,25 @@ class ItineraryService(ItineraryCommandPort):
         )
         self._itinerary_repository.save(updated)
         return updated
+
+    def get_itinerary_summary(self) -> ItinerarySummary:
+        itineraries = self._itinerary_repository.list_all()
+        count_by_status = {
+            API_STATUS_PENDING: 0,
+            API_STATUS_IN_PROGRESS: 0,
+            API_STATUS_COMPLETED: 0,
+        }
+        total_value = Decimal("0")
+        for item in itineraries:
+            api_status = status_to_api(item.status)
+            if api_status in count_by_status:
+                count_by_status[api_status] += 1
+            total_value += item.value
+        return ItinerarySummary(
+            total_itineraries=len(itineraries),
+            total_value=total_value,
+            count_by_status=count_by_status,
+        )
 
     def _normalize_itinerary_id(self, itinerary_id: str | None) -> str | None:
         try:

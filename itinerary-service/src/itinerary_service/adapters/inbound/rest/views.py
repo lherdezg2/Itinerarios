@@ -21,6 +21,7 @@ from itinerary_service.application.itinerary_edit_rules import ItineraryEditNotA
 from itinerary_service.application.status_transitions import InvalidStatusTransitionError
 from itinerary_service.application.use_cases.itinerary_service import ItineraryService
 from itinerary_service.domain.itinerary import Itinerary
+from itinerary_service.domain.itinerary_summary import ItinerarySummary
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,14 @@ def _itinerary_to_json(item: Itinerary) -> dict[str, str]:
         "start_time": item.start_time.strftime("%H:%M:%S"),
         "end_time": item.end_time.strftime("%H:%M:%S"),
         "status": status_to_api(item.status),
+    }
+
+
+def _summary_to_json(summary: ItinerarySummary) -> dict:
+    return {
+        "total_itineraries": summary.total_itineraries,
+        "total_value": float(summary.total_value),
+        "count_by_status": summary.count_by_status,
     }
 
 
@@ -87,6 +96,14 @@ class ItineraryListCreateApiView(APIView):
             return Response({"detail": str(error)}, status=status.HTTP_502_BAD_GATEWAY)
         except (KeyError, ValueError) as error:
             return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ItinerarySummaryApiView(APIView):
+    """GET /api/itineraries/summary/ — métricas agregadas (HU-B10)."""
+
+    def get(self, request):
+        summary = itinerary_service.get_itinerary_summary()
+        return Response(_summary_to_json(summary), status=status.HTTP_200_OK)
 
 
 class ItineraryDetailApiView(APIView):

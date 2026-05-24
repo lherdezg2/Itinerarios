@@ -9,6 +9,7 @@ class ItineraryRecord(models.Model):
     start_time = models.TimeField()
     end_time = models.TimeField()
     status = models.CharField(max_length=32, default="Pendiente")
+    value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     class Meta:
         db_table = "itinerary_itineraryrecord"

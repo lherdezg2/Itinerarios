@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import date, time
+from decimal import Decimal
 from enum import Enum
 
 
@@ -21,6 +22,7 @@ class Itinerary:
     start_time: time
     end_time: time
     status: ItineraryStatus
+    value: Decimal = Decimal("0")
 
 
 def new_itinerary_pending(
@@ -30,6 +32,7 @@ def new_itinerary_pending(
     travel_date: date,
     start_time: time,
     end_time: time,
+    value: Decimal = Decimal("0"),
 ) -> Itinerary:
     """Asigna el estado inicial en el dominio (HU-B3)."""
     return Itinerary(
@@ -40,4 +43,5 @@ def new_itinerary_pending(
         start_time=start_time,
         end_time=end_time,
         status=ItineraryStatus.PENDIENTE,
+        value=value,
     )
