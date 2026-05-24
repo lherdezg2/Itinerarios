@@ -46,6 +46,7 @@ Itinerary Service:
 
 - `GET /api/itineraries/` — listar todos los itinerarios (HU-C1)
 - `GET /api/itineraries/{itinerary_id}/` — consultar uno por ID (HU-C2)
+- `PATCH /api/itineraries/{itinerary_id}/` — actualizar campos permitidos (HU-B5; bloqueado si COMPLETED → 409)
 - `DELETE /api/itineraries/{itinerary_id}/` — eliminar itinerario (HU-C4, 204 sin body)
 - `PATCH /api/itineraries/{itinerary_id}/status/` — cambiar estado (HU-C3)
 - `POST /api/itineraries/` — crear itinerario

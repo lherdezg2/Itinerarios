@@ -11,6 +11,7 @@ from itinerary_service.application.ports.outbound.airport_validation_port import
 from itinerary_service.application.ports.outbound.itinerary_repository_port import (
     ItineraryRepositoryPort,
 )
+from itinerary_service.application.itinerary_edit_rules import ensure_itinerary_editable
 from itinerary_service.application.status_codes import parse_api_status
 from itinerary_service.application.status_transitions import ensure_valid_status_transition
 from itinerary_service.domain.itinerary import Itinerary, new_itinerary_pending
@@ -103,6 +104,75 @@ class ItineraryService(ItineraryCommandPort):
 
         self._itinerary_repository.delete(itinerary)
 
+    def update_itinerary(self, itinerary_id: str, data: dict) -> Itinerary:
+        if not isinstance(data, dict):
+            raise ValueError("El cuerpo de la solicitud debe ser un objeto JSON.")
+
+        forbidden = {"itinerary_id", "status", "travel_date"}
+        if forbidden.intersection(data.keys()):
+            raise ValueError("No se permite modificar itinerary_id, status ni travel_date.")
+
+        cleaned_id = self._normalize_itinerary_id(itinerary_id)
+        if cleaned_id is None:
+            raise ItineraryNotFoundError("Itinerario no encontrado.")
+
+        itinerary = self._itinerary_repository.get_by_itinerary_id(cleaned_id)
+        if itinerary is None:
+            raise ItineraryNotFoundError("Itinerario no encontrado.")
+
+        ensure_itinerary_editable(itinerary.status)
+
+        origin = itinerary.origin_airport_id
+        if "origin_airport_id" in data:
+            origin = (data["origin_airport_id"] or "").strip().upper()
+            if not origin:
+                raise ValueError("El aeropuerto de origen es obligatorio.")
+
+        destination = itinerary.destination_airport_id
+        if "destination_airport_id" in data:
+            destination = (data["destination_airport_id"] or "").strip().upper()
+            if not destination:
+                raise ValueError("El aeropuerto de destino es obligatorio.")
+
+        travel_date = itinerary.travel_date
+        if "start_date" in data:
+            travel_date = self._parse_date(str(data["start_date"]))
+        if "end_date" in data:
+            end_date = self._parse_date(str(data["end_date"]))
+            if "start_date" in data and end_date != travel_date:
+                raise ValueError("start_date y end_date deben coincidir en el MVP.")
+            travel_date = end_date
+
+        start_time = itinerary.start_time
+        if "start_time" in data:
+            start_time = self._parse_time(str(data["start_time"]))
+
+        end_time = itinerary.end_time
+        if "end_time" in data:
+            end_time = self._parse_time(str(data["end_time"]))
+
+        if end_time <= start_time:
+            raise ValueError("La hora final debe ser mayor que la inicial")
+
+        self._validate_airports(origin, destination)
+        self._ensure_no_overlap(
+            travel_date,
+            start_time,
+            end_time,
+            exclude_itinerary_id=cleaned_id,
+        )
+
+        updated = replace(
+            itinerary,
+            origin_airport_id=origin,
+            destination_airport_id=destination,
+            travel_date=travel_date,
+            start_time=start_time,
+            end_time=end_time,
+        )
+        self._itinerary_repository.save(updated)
+        return updated
+
     def _normalize_itinerary_id(self, itinerary_id: str | None) -> str | None:
         try:
             return normalize_itinerary_id(itinerary_id)
@@ -130,8 +200,16 @@ class ItineraryService(ItineraryCommandPort):
         if not self._airport_validation.airport_exists(destination_airport_id):
             raise ValueError("El aeropuerto de destino no existe segun el Airport Service.")
 
-    def _ensure_no_overlap(self, travel_date: date, start_time: time, end_time: time) -> None:
+    def _ensure_no_overlap(
+        self,
+        travel_date: date,
+        start_time: time,
+        end_time: time,
+        exclude_itinerary_id: str | None = None,
+    ) -> None:
         for existing in self._itinerary_repository.get_by_date(travel_date):
+            if exclude_itinerary_id and existing.itinerary_id == exclude_itinerary_id:
+                continue
             if same_day_time_intervals_overlap(
                 existing.travel_date,
                 existing.start_time,

@@ -17,6 +17,7 @@ from itinerary_service.application.exceptions import (
     ItineraryNotFoundError,
     UpstreamAirportServiceError,
 )
+from itinerary_service.application.itinerary_edit_rules import ItineraryEditNotAllowedError
 from itinerary_service.application.status_transitions import InvalidStatusTransitionError
 from itinerary_service.application.use_cases.itinerary_service import ItineraryService
 from itinerary_service.domain.itinerary import Itinerary
@@ -89,7 +90,7 @@ class ItineraryListCreateApiView(APIView):
 
 
 class ItineraryDetailApiView(APIView):
-    """GET/DELETE /api/itineraries/{itinerary_id}/ — consulta (HU-C2) y eliminación (HU-C4)."""
+    """GET/PATCH/DELETE /api/itineraries/{itinerary_id}/ — consulta, edición (HU-B5) y eliminación."""
 
     def get(self, request, itinerary_id: str):
         cleaned, error_response = _parse_itinerary_id_or_response(itinerary_id)
@@ -104,6 +105,24 @@ class ItineraryDetailApiView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response(_itinerary_to_json(itinerary), status=status.HTTP_200_OK)
+
+    def patch(self, request, itinerary_id: str):
+        cleaned, error_response = _parse_itinerary_id_or_response(itinerary_id)
+        if error_response is not None:
+            return error_response
+
+        logger.info("Actualizando itinerario %s", cleaned)
+        try:
+            itinerary = itinerary_service.update_itinerary(cleaned, request.data)
+            return Response(_itinerary_to_json(itinerary), status=status.HTTP_200_OK)
+        except ItineraryNotFoundError as error:
+            return Response({"detail": str(error)}, status=status.HTTP_404_NOT_FOUND)
+        except ItineraryEditNotAllowedError as error:
+            return Response({"detail": str(error)}, status=status.HTTP_409_CONFLICT)
+        except UpstreamAirportServiceError as error:
+            return Response({"detail": str(error)}, status=status.HTTP_502_BAD_GATEWAY)
+        except ValueError as error:
+            return Response({"detail": str(error)}, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, itinerary_id: str):
         cleaned, error_response = _parse_itinerary_id_or_response(itinerary_id)
