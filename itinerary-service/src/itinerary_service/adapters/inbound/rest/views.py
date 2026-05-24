@@ -17,9 +17,9 @@ from itinerary_service.application.exceptions import (
     ItineraryNotFoundError,
     UpstreamAirportServiceError,
 )
+from itinerary_service.application.status_transitions import InvalidStatusTransitionError
 from itinerary_service.application.use_cases.itinerary_service import ItineraryService
 from itinerary_service.domain.itinerary import Itinerary
-from itinerary_service.domain.status_transitions import InvalidStatusTransitionError
 
 logger = logging.getLogger(__name__)
 
