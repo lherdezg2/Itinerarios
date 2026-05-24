@@ -16,6 +16,7 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
     "rest_framework",
+    "drf_spectacular",
     "corsheaders",
     "itinerary_service.adapters.outbound.db",
 ]
@@ -61,3 +62,13 @@ LANGUAGE_CODE = "es-co"
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
+
+REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Itinerary Service API",
+    "DESCRIPTION": "API para gestión de itinerarios",
+    "VERSION": "1.0.0",
+}
