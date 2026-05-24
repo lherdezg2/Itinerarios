@@ -89,7 +89,7 @@ class ItineraryListCreateApiView(APIView):
 
 
 class ItineraryDetailApiView(APIView):
-    """GET /api/itineraries/{itinerary_id}/ — consulta por ID (HU-C2)."""
+    """GET/DELETE /api/itineraries/{itinerary_id}/ — consulta (HU-C2) y eliminación (HU-C4)."""
 
     def get(self, request, itinerary_id: str):
         cleaned, error_response = _parse_itinerary_id_or_response(itinerary_id)
@@ -104,6 +104,18 @@ class ItineraryDetailApiView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response(_itinerary_to_json(itinerary), status=status.HTTP_200_OK)
+
+    def delete(self, request, itinerary_id: str):
+        cleaned, error_response = _parse_itinerary_id_or_response(itinerary_id)
+        if error_response is not None:
+            return error_response
+
+        logger.info("Eliminando itinerario %s", cleaned)
+        try:
+            itinerary_service.delete_itinerary(cleaned)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ItineraryNotFoundError as error:
+            return Response({"detail": str(error)}, status=status.HTTP_404_NOT_FOUND)
 
 
 class ItineraryStatusUpdateApiView(APIView):

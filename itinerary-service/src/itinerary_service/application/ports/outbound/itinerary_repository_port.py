@@ -20,3 +20,7 @@ class ItineraryRepositoryPort(ABC):
     @abstractmethod
     def get_by_itinerary_id(self, itinerary_id: str) -> Itinerary | None:
         raise NotImplementedError
+
+    @abstractmethod
+    def delete(self, itinerary: Itinerary) -> None:
+        raise NotImplementedError

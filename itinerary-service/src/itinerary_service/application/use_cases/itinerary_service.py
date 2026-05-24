@@ -92,6 +92,17 @@ class ItineraryService(ItineraryCommandPort):
         self._itinerary_repository.save(updated)
         return updated
 
+    def delete_itinerary(self, itinerary_id: str) -> None:
+        cleaned_id = self._normalize_itinerary_id(itinerary_id)
+        if cleaned_id is None:
+            raise ItineraryNotFoundError("Itinerario no encontrado.")
+
+        itinerary = self._itinerary_repository.get_by_itinerary_id(cleaned_id)
+        if itinerary is None:
+            raise ItineraryNotFoundError("Itinerario no encontrado.")
+
+        self._itinerary_repository.delete(itinerary)
+
     def _normalize_itinerary_id(self, itinerary_id: str | None) -> str | None:
         try:
             return normalize_itinerary_id(itinerary_id)

@@ -36,6 +36,9 @@ class DjangoItineraryRepository(ItineraryRepositoryPort):
             return None
         return _to_domain(row)
 
+    def delete(self, itinerary: Itinerary) -> None:
+        ItineraryRecord.objects.filter(itinerary_id=itinerary.itinerary_id).delete()
+
 
 def _to_domain(row: ItineraryRecord) -> Itinerary:
     return Itinerary(

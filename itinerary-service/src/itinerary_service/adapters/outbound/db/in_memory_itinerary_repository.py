@@ -25,3 +25,6 @@ class InMemoryItineraryRepository(ItineraryRepositoryPort):
             if item.itinerary_id == itinerary_id:
                 return item
         return None
+
+    def delete(self, itinerary: Itinerary) -> None:
+        self._items = [i for i in self._items if i.itinerary_id != itinerary.itinerary_id]
