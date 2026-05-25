@@ -64,18 +64,39 @@ Ejemplo de respuesta del listado (200):
     "end_date": "2026-04-20",
     "start_time": "08:30:00",
     "end_time": "10:00:00",
-    "status": "PENDING"
+    "status": "PENDING",
+    "value": 350000.0
   }
 ]
 ```
 
-Cambio de estado (PATCH, body):
+Cambio de estado (PATCH, body) — **calculado automáticamente** según fecha y horario (zona `America/Bogota`):
+
+| Condición | Estado |
+|-----------|--------|
+| Antes de la hora de inicio | `PENDING` (Pendiente) |
+| Entre inicio y fin (inclusive) | `IN_PROGRESS` (En curso) |
+| Después de la hora de fin | `COMPLETED` (Completado) |
+
+El endpoint `PATCH /api/itineraries/{id}/status/` recalcula y devuelve el estado actual; no admite cambio manual.
+
+Valores API: `PENDING`, `IN_PROGRESS`, `COMPLETED`.
+
+Ejemplo de body para editar itinerario (PATCH parcial, HU-B5):
 
 ```json
-{ "status": "IN_PROGRESS" }
+{
+  "origin_airport_id": "BOG",
+  "destination_airport_id": "CLO",
+  "start_date": "2026-04-21",
+  "end_date": "2026-04-21",
+  "start_time": "09:00",
+  "end_time": "11:30",
+  "value": 420000
+}
 ```
 
-Valores permitidos: `PENDING`, `IN_PROGRESS`, `COMPLETED`. Transiciones validas: Pendiente→En curso, Pendiente→Completado, En curso→Completado. Desde `COMPLETED` no se permite cambiar.
+Solo se puede editar si el estado es `PENDING` o `IN_PROGRESS`. Desde `COMPLETED` responde **409**.
 
 En el MVP de un solo día de viaje, `start_date` y `end_date` coinciden con la fecha almacenada (`travel_date` al crear).
 
@@ -87,10 +108,13 @@ Ejemplo de body para crear itinerario:
   "origin_airport_id": "BOG",
   "destination_airport_id": "MDE",
   "travel_date": "2026-04-20",
-  "start_time": "08:30",
-  "end_time": "10:00"
-}
+    "start_time": "08:30",
+    "end_time": "10:00",
+    "value": 350000
+  }
 ```
+
+`value` es obligatorio al crear: número mayor o igual a cero (precio del viaje en COP). La bitácora (`GET /api/itineraries/summary/`) expone `total_value` como suma de todos los valores.
 
 Las horas pueden enviarse como `HH:MM` o `HH:MM:SS`. La hora final debe ser estrictamente mayor que la inicial. Al crear, el estado inicial es **Pendiente** (HU-B3). Respuesta exitosa (201):
 
@@ -98,7 +122,8 @@ Las horas pueden enviarse como `HH:MM` o `HH:MM:SS`. La hora final debe ser estr
 {
   "message": "Itinerario creado correctamente",
   "itinerary_id": "ITI-001",
-  "status": "Pendiente"
+  "status": "PENDING",
+  "value": 350000.0
 }
 ```
 

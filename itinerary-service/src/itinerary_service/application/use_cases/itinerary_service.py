@@ -17,14 +17,13 @@ from itinerary_service.application.status_codes import (
     API_STATUS_COMPLETED,
     API_STATUS_IN_PROGRESS,
     API_STATUS_PENDING,
-    parse_api_status,
     status_to_api,
 )
-from itinerary_service.application.status_transitions import ensure_valid_status_transition
 from itinerary_service.domain.itinerary import Itinerary, new_itinerary_pending
 from itinerary_service.domain.itinerary_id import normalize_itinerary_id
 from itinerary_service.domain.itinerary_summary import ItinerarySummary
 from itinerary_service.domain.schedule_overlap import same_day_time_intervals_overlap
+from itinerary_service.domain.status_from_schedule import compute_itinerary_status
 
 
 class ItineraryService(ItineraryCommandPort):
@@ -44,6 +43,7 @@ class ItineraryService(ItineraryCommandPort):
         travel_date_iso: str,
         start_time_iso: str,
         end_time_iso: str,
+        travel_value: object,
     ) -> Itinerary:
         itinerary_id_clean = itinerary_id.strip()
         if not itinerary_id_clean:
@@ -59,6 +59,7 @@ class ItineraryService(ItineraryCommandPort):
         travel_date = self._parse_date(travel_date_iso)
         start_time = self._parse_time(start_time_iso)
         end_time = self._parse_time(end_time_iso)
+        value = self._parse_value(travel_value)
 
         if end_time <= start_time:
             raise ValueError("La hora final debe ser mayor que la inicial")
@@ -73,18 +74,25 @@ class ItineraryService(ItineraryCommandPort):
             travel_date=travel_date,
             start_time=start_time,
             end_time=end_time,
+            value=value,
         )
         self._itinerary_repository.save(itinerary)
-        return itinerary
+        return self._apply_computed_status(itinerary)
 
     def list_itineraries(self) -> list[Itinerary]:
-        return self._itinerary_repository.list_all()
+        return [
+            self._apply_computed_status(item)
+            for item in self._itinerary_repository.list_all()
+        ]
 
     def get_itinerary_by_id(self, itinerary_id: str) -> Itinerary | None:
         cleaned = self._normalize_itinerary_id(itinerary_id)
         if cleaned is None:
             return None
-        return self._itinerary_repository.get_by_itinerary_id(cleaned)
+        itinerary = self._itinerary_repository.get_by_itinerary_id(cleaned)
+        if itinerary is None:
+            return None
+        return self._apply_computed_status(itinerary)
 
     def update_status(self, itinerary_id: str, new_status: str) -> Itinerary:
         cleaned_id = self._normalize_itinerary_id(itinerary_id)
@@ -95,11 +103,7 @@ class ItineraryService(ItineraryCommandPort):
         if itinerary is None:
             raise ItineraryNotFoundError("Itinerario no encontrado.")
 
-        parsed_status = parse_api_status(new_status)
-        ensure_valid_status_transition(itinerary.status, parsed_status)
-        updated = replace(itinerary, status=parsed_status)
-        self._itinerary_repository.save(updated)
-        return updated
+        return self._apply_computed_status(itinerary)
 
     def delete_itinerary(self, itinerary_id: str) -> None:
         cleaned_id = self._normalize_itinerary_id(itinerary_id)
@@ -128,6 +132,7 @@ class ItineraryService(ItineraryCommandPort):
         if itinerary is None:
             raise ItineraryNotFoundError("Itinerario no encontrado.")
 
+        itinerary = self._apply_computed_status(itinerary)
         ensure_itinerary_editable(itinerary.status)
 
         origin = itinerary.origin_airport_id
@@ -162,6 +167,10 @@ class ItineraryService(ItineraryCommandPort):
         if end_time <= start_time:
             raise ValueError("La hora final debe ser mayor que la inicial")
 
+        value = itinerary.value
+        if "value" in data:
+            value = self._parse_value(data["value"])
+
         self._validate_airports(origin, destination)
         self._ensure_no_overlap(
             travel_date,
@@ -177,12 +186,13 @@ class ItineraryService(ItineraryCommandPort):
             travel_date=travel_date,
             start_time=start_time,
             end_time=end_time,
+            value=value,
         )
         self._itinerary_repository.save(updated)
-        return updated
+        return self._apply_computed_status(updated)
 
     def get_itinerary_summary(self) -> ItinerarySummary:
-        itineraries = self._itinerary_repository.list_all()
+        itineraries = self.list_itineraries()
         count_by_status = {
             API_STATUS_PENDING: 0,
             API_STATUS_IN_PROGRESS: 0,
@@ -199,6 +209,18 @@ class ItineraryService(ItineraryCommandPort):
             total_value=total_value,
             count_by_status=count_by_status,
         )
+
+    def _apply_computed_status(self, itinerary: Itinerary) -> Itinerary:
+        computed = compute_itinerary_status(
+            itinerary.travel_date,
+            itinerary.start_time,
+            itinerary.end_time,
+        )
+        if itinerary.status != computed:
+            updated = replace(itinerary, status=computed)
+            self._itinerary_repository.save(updated)
+            return updated
+        return itinerary
 
     def _normalize_itinerary_id(self, itinerary_id: str | None) -> str | None:
         try:
@@ -220,6 +242,25 @@ class ItineraryService(ItineraryCommandPort):
         if len(v) == 5 and v[2] == ":":
             v = v + ":00"
         return time.fromisoformat(v)
+
+    def _parse_value(self, value: object) -> Decimal:
+        if value is None:
+            raise ValueError("El valor del viaje es obligatorio.")
+        raw = str(value).strip()
+        if not raw:
+            raise ValueError("El valor del viaje es obligatorio.")
+        normalized = raw.replace("$", "").replace(" ", "")
+        if normalized.count(",") == 1 and normalized.count(".") == 0:
+            normalized = normalized.replace(",", ".")
+        else:
+            normalized = normalized.replace(",", "")
+        try:
+            parsed = Decimal(normalized)
+        except Exception as exc:
+            raise ValueError("El valor del viaje debe ser un numero valido.") from exc
+        if parsed < 0:
+            raise ValueError("El valor del viaje debe ser mayor o igual a cero.")
+        return parsed.quantize(Decimal("0.01"))
 
     def _validate_airports(self, origin_airport_id: str, destination_airport_id: str) -> None:
         if not self._airport_validation.airport_exists(origin_airport_id):

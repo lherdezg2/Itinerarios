@@ -42,6 +42,7 @@ def _itinerary_to_json(item: Itinerary) -> dict[str, str]:
         "start_time": item.start_time.strftime("%H:%M:%S"),
         "end_time": item.end_time.strftime("%H:%M:%S"),
         "status": status_to_api(item.status),
+        "value": float(item.value),
     }
 
 
@@ -83,12 +84,14 @@ class ItineraryListCreateApiView(APIView):
                 travel_date_iso=body["travel_date"],
                 start_time_iso=body["start_time"],
                 end_time_iso=body["end_time"],
+                travel_value=body["value"],
             )
             return Response(
                 {
                     "message": "Itinerario creado correctamente",
                     "itinerary_id": itinerary.itinerary_id,
                     "status": status_to_api(itinerary.status),
+                    "value": float(itinerary.value),
                 },
                 status=status.HTTP_201_CREATED,
             )
@@ -155,7 +158,7 @@ class ItineraryDetailApiView(APIView):
 
 
 class ItineraryStatusUpdateApiView(APIView):
-    """PATCH /api/itineraries/{itinerary_id}/status/ — cambio de estado (HU-C3)."""
+    """PATCH /api/itineraries/{itinerary_id}/status/ — recalcula estado segun horario (HU-C3)."""
 
     def patch(self, request, itinerary_id: str):
         cleaned, error_response = _parse_itinerary_id_or_response(itinerary_id)

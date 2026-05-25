@@ -24,11 +24,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
 ]
 
-# MVP (HU-A3): el mapa web se sirve en otro origen; en depuracion se permite cualquier origen.
-if DEBUG:
-    CORS_ALLOW_ALL_ORIGINS = True
-else:
-    CORS_ALLOWED_ORIGINS: list[str] = []
+# MVP: frontend en http://localhost:8080 (nginx) consume APIs en :8001 / :8002.
+CORS_ALLOW_ALL_ORIGINS = True
 
 ROOT_URLCONF = "airport_service.config.urls"
 TEMPLATES = []

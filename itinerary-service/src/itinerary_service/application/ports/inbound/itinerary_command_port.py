@@ -14,6 +14,7 @@ class ItineraryCommandPort(ABC):
         travel_date_iso: str,
         start_time_iso: str,
         end_time_iso: str,
+        travel_value: object,
     ) -> Itinerary:
         raise NotImplementedError
 

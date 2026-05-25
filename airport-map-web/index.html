@@ -3,23 +3,45 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mapa de aeropuertos (MVP)</title>
-    <!-- HU-A3/A4: datos solo desde Airport Service (?api=... opcional) -->
-    <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+    <title>Itinerarios — Mapa de aeropuertos</title>
+    <!-- Mapa Leaflet + OpenStreetMap. Modo demo por defecto; añade ?dev=1 para detalles técnicos. -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
       :root {
         font-family: system-ui, sans-serif;
         color: #0f172a;
         background: #f8fafc;
       }
+      html,
       body {
-        margin: 0 auto;
-        max-width: 960px;
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        overflow: hidden;
+      }
+      .app-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(600px, 860px);
+        height: 100vh;
+      }
+      .map-panel {
+        position: relative;
+        min-height: 0;
+        background: #e2e8f0;
+        border-right: 1px solid #e2e8f0;
+      }
+      .form-panel {
+        min-height: 0;
+        overflow-y: auto;
         padding: 1rem 1.25rem 2rem;
+        background: #f8fafc;
       }
       h1 {
         font-size: 1.25rem;
         font-weight: 600;
+        margin: 0 0 0.5rem;
       }
       p.lead {
         margin: 0 0 1rem;
@@ -53,11 +75,12 @@
       }
       input[type="text"] {
         width: 100%;
-        max-width: 22rem;
+        max-width: 100%;
         padding: 0.45rem 0.5rem;
         border: 1px solid #cbd5e1;
         border-radius: 6px;
         font-size: 0.95rem;
+        box-sizing: border-box;
       }
       button {
         margin-top: 0.5rem;
@@ -86,11 +109,11 @@
         color: #b91c1c;
       }
       #map {
+        position: absolute;
+        inset: 0;
         width: 100%;
-        height: 480px;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        background: #fff;
+        height: 100%;
+        z-index: 0;
       }
       .hint {
         font-size: 0.8rem;
@@ -139,52 +162,408 @@
       button.btn-secondary:hover:not(:disabled) {
         background: #334155;
       }
+      button.btn-clear {
+        background: #fff;
+        color: #475569;
+        border: 1px solid #cbd5e1;
+        margin: 0.75rem 0 1rem;
+      }
+      button.btn-clear:hover:not(:disabled) {
+        background: #f1f5f9;
+        color: #0f172a;
+      }
+      .metric-value.metric-money {
+        font-size: 1.05rem;
+      }
       input[type="date"],
-      input[type="time"] {
-        max-width: 12rem;
+      input[type="time"],
+      input[type="number"] {
+        width: 100%;
+        max-width: 100%;
         padding: 0.45rem 0.5rem;
         border: 1px solid #cbd5e1;
         border-radius: 6px;
         font-size: 0.95rem;
+        box-sizing: border-box;
       }
       .readonly-field {
         padding: 0.35rem 0;
         font-weight: 600;
         color: #334155;
       }
+      input.readonly-input {
+        background: #f1f5f9;
+        color: #334155;
+        cursor: default;
+      }
       #itinerary-result {
-        font-size: 0.85rem;
+        font-size: 0.9rem;
+        line-height: 1.45;
         margin-top: 0.5rem;
         white-space: pre-wrap;
+      }
+      #itinerary-result.ok {
+        color: #15803d;
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        border-radius: 8px;
+        padding: 0.65rem 0.75rem;
+      }
+      #itinerary-result.err {
+        color: #b91c1c;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        padding: 0.65rem 0.75rem;
+      }
+      html.demo-mode .dev-only {
+        display: none !important;
+      }
+      .dev-panel {
+        margin-top: 1.5rem;
+        padding: 0.75rem 1rem;
+        border: 1px dashed #cbd5e1;
+        border-radius: 8px;
+        background: #fff;
+        font-size: 0.8rem;
+        color: #64748b;
+      }
+      .dev-panel code {
+        font-size: 0.75rem;
+      }
+      .travel-log {
+        margin-top: 0.25rem;
+        padding-top: 0.25rem;
+      }
+      .travel-log h2 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin: 0;
+      }
+      .travel-log-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.35rem;
+      }
+      .travel-log-header button {
+        margin-top: 0;
+        flex-shrink: 0;
+      }
+      .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+        margin: 0.75rem 0 1rem;
+      }
+      .metric-card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 0.65rem 0.5rem;
+        text-align: center;
+      }
+      .metric-value {
+        display: block;
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: #1d4ed8;
+      }
+      .metric-label {
+        display: block;
+        font-size: 0.75rem;
+        color: #64748b;
+        margin-top: 0.15rem;
+      }
+      .table-wrap {
+        overflow-x: auto;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+      }
+      .bitacora-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8rem;
+        table-layout: fixed;
+      }
+      .bitacora-table th,
+      .bitacora-table td {
+        padding: 0.4rem 0.45rem;
+        text-align: left;
+        border-bottom: 1px solid #f1f5f9;
+        vertical-align: middle;
+      }
+      .bitacora-table th:nth-child(1),
+      .bitacora-table td:nth-child(1) {
+        width: 4.25rem;
+      }
+      .bitacora-table th:nth-child(2),
+      .bitacora-table td:nth-child(2) {
+        width: 10.5rem;
+      }
+      .bitacora-table th:nth-child(3),
+      .bitacora-table td:nth-child(3) {
+        width: 5.25rem;
+      }
+      .bitacora-table th:nth-child(4),
+      .bitacora-table td:nth-child(4) {
+        width: 6.5rem;
+      }
+      .bitacora-table th:nth-child(5),
+      .bitacora-table td:nth-child(5) {
+        width: 6rem;
+      }
+      .bitacora-table th:nth-child(6),
+      .bitacora-table td:nth-child(6) {
+        width: 5.25rem;
+      }
+      .bitacora-table th:nth-child(7),
+      .bitacora-table td:nth-child(7) {
+        width: 5.5rem;
+      }
+      .bitacora-table td:nth-child(2) {
+        white-space: nowrap;
+      }
+      .bitacora-table th {
+        background: #f8fafc;
+        font-weight: 600;
+        color: #475569;
+        white-space: nowrap;
+      }
+      .bitacora-table tbody tr:last-child td {
+        border-bottom: none;
+      }
+      .status-badge {
+        display: inline-block;
+        padding: 0.15rem 0.45rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .status-pending {
+        background: #fef9c3;
+        color: #854d0e;
+      }
+      .status-in-progress {
+        background: #dbeafe;
+        color: #1e40af;
+      }
+      .status-completed {
+        background: #dcfce7;
+        color: #166534;
+      }
+      #bitacora-empty {
+        padding: 1rem;
+        text-align: center;
+        color: #94a3b8;
+        margin: 0;
+      }
+      #bitacora-empty.hidden {
+        display: none;
+      }
+      #bitacora-table.hidden {
+        display: none;
+      }
+      #bitacora-load-error {
+        color: #b91c1c;
+        font-size: 0.85rem;
+        margin: 0 0 0.5rem;
+      }
+      #bitacora-load-error:empty {
+        display: none;
+      }
+      .bitacora-table .col-action {
+        text-align: center;
+        vertical-align: middle;
+      }
+      .bitacora-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+        align-items: stretch;
+      }
+      .bitacora-actions .btn-edit-itinerary,
+      .bitacora-actions .btn-cancel-itinerary {
+        margin: 0;
+        width: 100%;
+      }
+      button.btn-cancel-itinerary {
+        margin-top: 0;
+        padding: 0.25rem 0.45rem;
+        font-size: 0.72rem;
+        background: #fff;
+        color: #b91c1c;
+        border: 1px solid #fecaca;
+      }
+      button.btn-cancel-itinerary:hover:not(:disabled) {
+        background: #fef2f2;
+        border-color: #f87171;
+      }
+      button.btn-edit-itinerary {
+        margin-top: 0;
+        padding: 0.25rem 0.45rem;
+        font-size: 0.72rem;
+        background: #fff;
+        color: #1d4ed8;
+        border: 1px solid #bfdbfe;
+      }
+      button.btn-edit-itinerary:hover:not(:disabled) {
+        background: #eff6ff;
+        border-color: #93c5fd;
+      }
+      button.btn-edit-itinerary:disabled {
+        opacity: 0.45;
+      }
+      .edit-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+      }
+      .edit-modal.hidden {
+        display: none;
+      }
+      .edit-modal-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+      }
+      .edit-modal-panel {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        max-width: 480px;
+        background: #fff;
+        border-radius: 10px;
+        padding: 1rem 1.25rem 1.25rem;
+        box-shadow: 0 10px 40px rgba(15, 23, 42, 0.18);
+      }
+      .edit-search-row {
+        display: flex;
+        gap: 0.4rem;
+        margin: 0.25rem 0 0.35rem;
+      }
+      .edit-search-row input[type="text"] {
+        flex: 1;
+        min-width: 0;
+      }
+      .edit-search-row button {
+        margin-top: 0;
+        flex-shrink: 0;
+        padding: 0.45rem 0.65rem;
+        font-size: 0.82rem;
+      }
+      .edit-modal-panel select {
+        width: 100%;
+        max-width: 100%;
+        padding: 0.45rem 0.5rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        box-sizing: border-box;
+        background: #fff;
+      }
+      .edit-modal-panel h2 {
+        margin: 0 0 0.75rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+      }
+      .edit-modal-panel label {
+        margin-top: 0.5rem;
+      }
+      .edit-readonly-id {
+        font-weight: 600;
+        margin: 0 0 0.75rem;
+        color: #334155;
+      }
+      .edit-modal-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 1rem;
+      }
+      .edit-modal-actions button {
+        margin-top: 0;
+      }
+      #edit-modal-error {
+        color: #b91c1c;
+        font-size: 0.85rem;
+        min-height: 1.1rem;
+        margin: 0.35rem 0 0;
+      }
+      #edit-modal-error:empty {
+        display: none;
+      }
+      @media (min-width: 480px) {
+        .metrics-grid {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+      @media (min-width: 900px) {
+        .metrics-grid {
+          grid-template-columns: repeat(5, 1fr);
+        }
+      }
+      @media (max-width: 900px) {
+        body {
+          overflow: auto;
+        }
+        .app-shell {
+          grid-template-columns: 1fr;
+          grid-template-rows: minmax(280px, 45vh) auto;
+          height: auto;
+          min-height: 100vh;
+        }
+        .map-panel {
+          min-height: 280px;
+          border-right: none;
+          border-bottom: 1px solid #e2e8f0;
+        }
+        .form-panel {
+          overflow: visible;
+        }
       }
     </style>
   </head>
   <body>
-    <h1>Mapa, selección e itinerario (HU-A3 / HU-A4 / HU-A5 / HU-B1)</h1>
+    <div class="app-shell">
+      <aside class="map-panel" aria-label="Panel del mapa">
+        <div id="map" aria-label="Mapa interactivo de aeropuertos"></div>
+      </aside>
+
+      <main class="form-panel">
+        <h1>Planifica tu itinerario</h1>
     <p class="lead">
-      Aeropuertos desde el Airport Service. Selección y validación (HU-A4/HU-A5) solo en cliente. Creación de itinerario
-      (HU-B1) envía un POST al Itinerary Service, que valida aeropuertos vía Airport Service y persiste en base de datos.
+      Busca aeropuertos en el mapa, elige origen y destino, y registra la fecha y horario de tu viaje.
     </p>
 
     <fieldset>
-      <legend>Búsqueda por nombre o ciudad</legend>
-      <label for="q">Texto</label>
-      <input id="q" type="text" placeholder="Ej. Bogotá, Cartagena" autocomplete="off" />
-      <div class="hint">Consume <code>GET /api/airports/search/?q=…</code></div>
-      <button type="button" id="btn-search">Buscar y mostrar en mapa</button>
+      <legend>Búsqueda por ciudad</legend>
+      <label for="q">Nombre de la ciudad</label>
+      <input id="q" type="text" placeholder="Ej. Bogotá, Cali, Medellín" autocomplete="off" />
+      <p class="hint">Puedes escribir la ciudad con o sin tildes y en mayúsculas o minúsculas (ej. bogota, BOGOTÁ, Medellin).</p>
+      <p class="hint dev-only">API: <code>GET /api/airports/search/?q=…</code></p>
+      <button type="button" id="btn-search">Buscar en el mapa</button>
     </fieldset>
 
     <fieldset>
-      <legend>Consulta por código IATA</legend>
-      <label for="iata">Código</label>
-      <input id="iata" type="text" maxlength="8" placeholder="Ej. BOG" autocomplete="off" />
-      <div class="hint">Consume <code>GET /api/airports/{id}/</code></div>
-      <button type="button" id="btn-by-id">Consultar y mostrar en mapa</button>
+      <legend>Búsqueda por código IATA</legend>
+      <label for="iata">Código del aeropuerto</label>
+      <input id="iata" type="text" maxlength="8" placeholder="Ej. BOG, CLO, MDE" autocomplete="off" />
+      <p class="hint">Usa el código de tres letras del aeropuerto si lo conoces.</p>
+      <p class="hint dev-only">API: <code>GET /api/airports/{id}/</code></p>
+      <button type="button" id="btn-by-id">Buscar en el mapa</button>
     </fieldset>
 
     <fieldset>
-      <legend>Selección en el mapa (HU-A4)</legend>
-      <p class="hint">Haz clic en un marcador. El aeropuerto se toma del listado ya obtenido del Airport Service (nombre, ciudad, coordenadas).</p>
+      <legend>Origen y destino en el mapa</legend>
+      <p class="hint">Elige si el próximo clic será origen o destino, luego pulsa el marcador en el mapa.</p>
       <label class="inline">
         <input type="radio" name="click-role" value="origin" checked />
         Asignar próximo clic como <strong style="color: #15803d">origen</strong>
@@ -196,50 +575,163 @@
     </fieldset>
 
     <div id="selection-summary" aria-live="polite">
-      <div class="empty">Origen y destino: aún no seleccionados (clic en un marcador del mapa).</div>
+      <div class="empty">Aún no has elegido origen ni destino. Haz clic en un marcador del mapa.</div>
     </div>
+    <button type="button" class="btn-clear" id="btn-clear-selection">
+      Limpiar todo
+    </button>
 
     <fieldset>
-      <legend>Validación de selección (HU-A5)</legend>
-      <p class="hint">
-        Comprueba en cliente que existan origen y destino. No se envían datos al servidor ni se guarda información.
-      </p>
+      <legend>Confirmar selección</legend>
+      <p class="hint">Comprueba que hayas elegido origen y destino antes de continuar.</p>
       <button type="button" id="btn-validate-selection">Validar selección</button>
       <button type="button" class="btn-secondary" id="btn-continue-step" disabled title="Valida primero con origen y destino completos">
-        Continuar (siguiente paso)
+        Continuar
       </button>
       <div id="validation-message" role="status"></div>
     </fieldset>
 
     <div id="status" role="status"></div>
-    <div id="map" aria-label="Mapa interactivo de aeropuertos"></div>
 
     <fieldset id="itinerary-create">
-      <legend>Crear itinerario (HU-B1)</legend>
-      <p class="hint">
-        Origen y destino se toman de la selección validada en el mapa. Opcional en URL: <code>?itinerary=http://localhost:8002</code>
-      </p>
-      <label for="itinerary-id">Identificador del itinerario</label>
-      <input id="itinerary-id" type="text" placeholder="Ej. ITI-001" autocomplete="off" />
+      <legend>Datos del viaje</legend>
+      <p class="hint">Indica cuándo viajas.</p>
+      <p class="hint dev-only">Parámetro URL opcional: <code>?itinerary=http://localhost:8002</code></p>
+      <label for="itinerary-id">Número de itinerario</label>
+      <input id="itinerary-id" type="text" class="readonly-input" readonly aria-readonly="true" tabindex="-1" />
+      <p class="hint">Asignado automáticamente al registrar cada viaje.</p>
       <label for="travel-date">Fecha del viaje</label>
       <input id="travel-date" type="date" />
-      <label for="start-time">Hora de inicio</label>
+      <label for="start-time">Hora de salida</label>
       <input id="start-time" type="time" />
-      <label for="end-time">Hora de fin</label>
+      <label for="end-time">Hora de llegada</label>
       <input id="end-time" type="time" />
-      <label>Aeropuerto de origen (desde selección)</label>
+      <label for="travel-value">Valor del viaje (COP)</label>
+      <input
+        id="travel-value"
+        type="number"
+        min="0"
+        step="1000"
+        inputmode="numeric"
+        placeholder="Ej. 350000"
+        required
+      />
+      <p class="hint">Costo del vuelo en pesos colombianos. Campo obligatorio.</p>
+      <label>Origen</label>
       <div id="itinerary-origin-display" class="readonly-field">—</div>
-      <label>Aeropuerto de destino (desde selección)</label>
+      <label>Destino</label>
       <div id="itinerary-dest-display" class="readonly-field">—</div>
-      <button type="button" id="btn-create-itinerary" disabled>Crear itinerario (POST)</button>
+      <button type="button" id="btn-create-itinerary" disabled>Registrar itinerario</button>
       <div id="itinerary-result" role="status"></div>
     </fieldset>
+
+    <section id="travel-log" class="travel-log" aria-label="Bitácora de viajes">
+      <div class="travel-log-header">
+        <h2>Bitácora de viajes</h2>
+        <button type="button" class="btn-secondary" id="btn-refresh-bitacora">Actualizar</button>
+      </div>
+      <p class="hint">Resumen y detalle de los viajes que has registrado.</p>
+      <p class="hint dev-only">
+        API: <code>GET /api/itineraries/summary/</code>, <code>GET /api/itineraries/</code>,
+        <code>PATCH /api/itineraries/{id}/</code>, <code>DELETE /api/itineraries/{id}/</code>
+      </p>
+      <p class="hint">El estado de cada viaje se calcula automáticamente según la fecha y el horario (hora Colombia).</p>
+      <div class="metrics-grid" id="bitacora-metrics">
+        <div class="metric-card">
+          <span class="metric-value" id="metric-total">0</span>
+          <span class="metric-label">Total viajes</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-value" id="metric-pending">0</span>
+          <span class="metric-label">Pendientes</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-value" id="metric-in-progress">0</span>
+          <span class="metric-label">En curso</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-value" id="metric-completed">0</span>
+          <span class="metric-label">Completados</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-value metric-money" id="metric-total-value">$0</span>
+          <span class="metric-label">Valor total (COP)</span>
+        </div>
+      </div>
+      <p id="bitacora-load-error" role="alert"></p>
+      <div class="table-wrap">
+        <table class="bitacora-table hidden" id="bitacora-table">
+          <thead>
+            <tr>
+              <th>Número</th>
+              <th>Ruta</th>
+              <th>Fecha</th>
+              <th>Horario</th>
+              <th>Valor</th>
+              <th>Estado</th>
+              <th class="col-action">Acción</th>
+            </tr>
+          </thead>
+          <tbody id="bitacora-table-body"></tbody>
+        </table>
+        <p id="bitacora-empty">Aún no hay viajes registrados.</p>
+      </div>
+    </section>
+
+
+    <div class="dev-only dev-panel" aria-label="Información para desarrolladores">
+      <strong>Modo desarrollo</strong> (<code>?dev=1</code> en la URL). Endpoints:
+      Airport <code>:8001</code>, Itinerary <code>:8002</code>.
+    </div>
+      </main>
+    </div>
+
+    <div id="edit-itinerary-modal" class="edit-modal hidden" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+      <div class="edit-modal-backdrop" id="edit-modal-backdrop"></div>
+      <div class="edit-modal-panel">
+        <h2 id="edit-modal-title">Editar viaje</h2>
+        <p class="edit-readonly-id">Número: <span id="edit-modal-itinerary-id">—</span></p>
+        <label for="edit-origin-q">Ciudad de origen</label>
+        <div class="edit-search-row">
+          <input id="edit-origin-q" type="text" placeholder="Ej. Bogotá" autocomplete="off" />
+          <button type="button" class="btn-secondary" id="edit-origin-search">Buscar</button>
+        </div>
+        <label for="edit-origin-airport">Aeropuerto de origen</label>
+        <select id="edit-origin-airport"></select>
+        <p class="hint">Busca la ciudad y elige el aeropuerto en la lista.</p>
+        <label for="edit-dest-q">Ciudad de destino</label>
+        <div class="edit-search-row">
+          <input id="edit-dest-q" type="text" placeholder="Ej. Medellín" autocomplete="off" />
+          <button type="button" class="btn-secondary" id="edit-dest-search">Buscar</button>
+        </div>
+        <label for="edit-dest-airport">Aeropuerto de destino</label>
+        <select id="edit-dest-airport"></select>
+        <p class="hint">Busca la ciudad y elige el aeropuerto en la lista.</p>
+        <label for="edit-travel-date">Fecha del viaje</label>
+        <input id="edit-travel-date" type="date" />
+        <label for="edit-start-time">Hora de salida</label>
+        <input id="edit-start-time" type="time" />
+        <label for="edit-end-time">Hora de llegada</label>
+        <input id="edit-end-time" type="time" />
+        <label for="edit-travel-value">Valor del viaje (COP)</label>
+        <input id="edit-travel-value" type="number" min="0" step="1000" inputmode="numeric" />
+        <p id="edit-modal-error" role="alert"></p>
+        <div class="edit-modal-actions">
+          <button type="button" id="btn-save-edit-itinerary">Guardar cambios</button>
+          <button type="button" class="btn-secondary" id="btn-close-edit-itinerary">Cerrar</button>
+        </div>
+      </div>
+    </div>
 
     <script>
       (function () {
         const params = new URLSearchParams(window.location.search);
+        if (!params.has("dev")) {
+          document.documentElement.classList.add("demo-mode");
+        }
         const API_BASE = (params.get("api") || "http://localhost:8001").replace(/\/$/, "");
         const ITINERARY_BASE = (params.get("itinerary") || "http://localhost:8002").replace(/\/$/, "");
+        const ITINERARY_ID_SEQ_KEY = "itinerary_map_last_seq";
 
         const statusEl = document.getElementById("status");
         const mapEl = document.getElementById("map");
@@ -257,8 +749,12 @@
         let selectedOrigin = null;
         /** @type {{ id: string, name: string, city: string, latitude: number, longitude: number } | null} */
         let selectedDestination = null;
-        /** HU-A5: solo true tras "Validar selección" con origen y destino presentes; se invalida al cambiar selección. */
+        /** Solo true tras validar origen y destino; se invalida al cambiar la selección. */
         let selectionValidationOk = false;
+        /** @type {object | null} */
+        let editingItineraryItem = null;
+        /** Cache IATA → ciudad para la bitácora. */
+        const airportCityCache = {};
 
         function todayIsoDate() {
           const d = new Date();
@@ -278,21 +774,208 @@
         }
 
         function syncItineraryCreateButton() {
-          const idVal = document.getElementById("itinerary-id").value.trim();
           const dateVal = document.getElementById("travel-date").value;
           const t0 = document.getElementById("start-time").value;
           const t1 = document.getElementById("end-time").value;
+          const travelValue = parseTravelValueInput(document.getElementById("travel-value").value);
           const o = selectedOrigin;
           const d = selectedDestination;
           const ready =
             selectionValidationOk &&
             Boolean(o) &&
             Boolean(d) &&
-            idVal.length > 0 &&
             dateVal.length > 0 &&
             t0.length > 0 &&
-            t1.length > 0;
+            t1.length > 0 &&
+            travelValue !== null;
           btnCreateItinerary.disabled = !ready;
+        }
+
+        function formatItineraryId(seq) {
+          return "ITI-" + String(seq).padStart(3, "0");
+        }
+
+        function parseItinerarySeq(id) {
+          const match = /^ITI-(\d+)$/i.exec(String(id || "").trim());
+          return match ? parseInt(match[1], 10) : 0;
+        }
+
+        function markItineraryIdUsed(seq) {
+          const previous = parseInt(localStorage.getItem(ITINERARY_ID_SEQ_KEY) || "0", 10);
+          localStorage.setItem(ITINERARY_ID_SEQ_KEY, String(Math.max(previous, seq)));
+        }
+
+        function formatItineraryStatus(code) {
+          const labels = {
+            PENDING: "Pendiente",
+            IN_PROGRESS: "En curso",
+            COMPLETED: "Completado",
+          };
+          return labels[String(code || "").toUpperCase()] || "Pendiente";
+        }
+
+        function formatDateDisplay(isoDate) {
+          if (!isoDate) {
+            return "—";
+          }
+          const parts = isoDate.split("-");
+          if (parts.length !== 3) {
+            return isoDate;
+          }
+          return parts[2] + "/" + parts[1] + "/" + parts[0];
+        }
+
+        function formatTimeDisplay(value) {
+          if (!value) {
+            return "—";
+          }
+          return value.length >= 5 ? value.slice(0, 5) : value;
+        }
+
+        function toTimeInputValue(value) {
+          if (!value) {
+            return "";
+          }
+          return value.length >= 5 ? value.slice(0, 5) : value;
+        }
+
+        function formatCopCurrency(amount) {
+          const num = Number(amount);
+          if (!isFinite(num)) {
+            return "—";
+          }
+          return new Intl.NumberFormat("es-CO", {
+            style: "currency",
+            currency: "COP",
+            maximumFractionDigits: 0,
+            minimumFractionDigits: 0,
+          }).format(num);
+        }
+
+        function parseTravelValueInput(raw) {
+          const text = String(raw || "").trim();
+          if (!text) {
+            return null;
+          }
+          const num = Number(text);
+          if (!isFinite(num) || num < 0) {
+            return null;
+          }
+          return num;
+        }
+
+        function buildItinerarySuccessMessage(
+          data,
+          origin,
+          destination,
+          travelDate,
+          startTime,
+          endTime,
+          travelValue
+        ) {
+          const id = data && data.itinerary_id ? data.itinerary_id : "—";
+          const status = formatItineraryStatus(data && data.status);
+          const route =
+            (origin.city || origin.name) +
+            " (" +
+            origin.id +
+            ") → " +
+            (destination.city || destination.name) +
+            " (" +
+            destination.id +
+            ")";
+          const schedule =
+            formatDateDisplay(travelDate) +
+            ", de " +
+            formatTimeDisplay(startTime) +
+            " a " +
+            formatTimeDisplay(endTime);
+          const valueAmount =
+            data && data.value != null ? data.value : travelValue != null ? travelValue : null;
+          return (
+            "Itinerario " +
+            id +
+            " creado correctamente.\n" +
+            route +
+            ".\n" +
+            schedule +
+            ".\nValor: " +
+            formatCopCurrency(valueAmount) +
+            ".\nEstado: " +
+            status +
+            "."
+          );
+        }
+
+        function friendlyItineraryError(message) {
+          const text = String(message || "").trim();
+          if (!text) {
+            return "No se pudo crear el itinerario. Intenta de nuevo.";
+          }
+          if (text.toLowerCase().indexOf("solapa") !== -1) {
+            return "Ya existe un itinerario en ese horario. Elige otra fecha u horas.";
+          }
+          if (text.toLowerCase().indexOf("origen") !== -1 && text.toLowerCase().indexOf("aeropuerto") !== -1) {
+            return "El aeropuerto de origen no es válido.";
+          }
+          if (text.toLowerCase().indexOf("destino") !== -1 && text.toLowerCase().indexOf("aeropuerto") !== -1) {
+            return "El aeropuerto de destino no es válido.";
+          }
+          if (text.toLowerCase().indexOf("hora") !== -1) {
+            return text;
+          }
+          if (text.toLowerCase().indexOf("valor") !== -1) {
+            return text.charAt(0).toUpperCase() + text.slice(1);
+          }
+          if (text.toLowerCase().indexOf("'value'") !== -1 || text === "value") {
+            return "El valor del viaje es obligatorio.";
+          }
+          if (text.toLowerCase().indexOf("no encontrado") !== -1) {
+            return "Ese viaje ya no existe. Actualiza la bitácora.";
+          }
+          if (text.toLowerCase().indexOf("completado") !== -1) {
+            return "No se puede editar un viaje completado.";
+          }
+          if (text.toLowerCase().indexOf("no permite edicion") !== -1) {
+            return "Este viaje no se puede editar en su estado actual.";
+          }
+          if (
+            text.indexOf("__FETCH_ERROR__") !== -1 ||
+            text.indexOf("JSON") !== -1 ||
+            text.indexOf("HTTP") !== -1 ||
+            text.indexOf("Failed to fetch") !== -1 ||
+            text.indexOf("NetworkError") !== -1
+          ) {
+            return "No pudimos registrar el itinerario. Verifica tu conexión e intenta de nuevo.";
+          }
+          return text;
+        }
+
+        function friendlyAirportError(message) {
+          const text = String(message || "").trim();
+          if (!text) {
+            return "No se pudo consultar aeropuertos. Intenta de nuevo.";
+          }
+          if (
+            text.indexOf("__FETCH_ERROR__") !== -1 ||
+            text.indexOf("JSON") !== -1 ||
+            text.indexOf("HTTP") !== -1 ||
+            text.indexOf("Failed to fetch") !== -1 ||
+            text.indexOf("NetworkError") !== -1
+          ) {
+            return "No pudimos buscar aeropuertos. Verifica tu conexión e intenta de nuevo.";
+          }
+          return text;
+        }
+
+        function setItineraryResult(text, kind) {
+          itineraryResultEl.textContent = text || "";
+          itineraryResultEl.classList.remove("ok", "err");
+          if (kind === "ok") {
+            itineraryResultEl.classList.add("ok");
+          } else if (kind === "err") {
+            itineraryResultEl.classList.add("err");
+          }
         }
 
         function setStatus(message, isError) {
@@ -333,7 +1016,7 @@
           if (!o && !d) {
             const hint = document.createElement("div");
             hint.className = "empty";
-            hint.textContent = "Origen y destino: aún no seleccionados (clic en un marcador del mapa).";
+            hint.textContent = "Aún no has elegido origen ni destino. Haz clic en un marcador del mapa.";
             summaryEl.appendChild(hint);
             updateItineraryDisplays();
             syncItineraryCreateButton();
@@ -361,7 +1044,7 @@
           btnContinue.title = "Valida primero con origen y destino completos";
           syncItineraryCreateButton();
           if (reason === "silent") {
-            itineraryResultEl.textContent = "";
+            setItineraryResult("", "");
             return;
           }
           if (reason === "selection-changed") {
@@ -374,7 +1057,7 @@
         function syncContinueAfterValidation() {
           btnContinue.disabled = !selectionValidationOk;
           btnContinue.title = selectionValidationOk
-            ? "Pasa al formulario de itinerario (HU-B1)."
+            ? "Pasa al formulario de datos del viaje."
             : "Valida primero con origen y destino completos";
           syncItineraryCreateButton();
         }
@@ -411,55 +1094,82 @@
           syncContinueAfterValidation();
         }
 
-        function defaultLayout(title) {
-          return {
-            title: title ? { text: title, font: { size: 15 } } : undefined,
-            geo: {
-              scope: "south america",
-              showland: true,
-              landcolor: "#eef2ff",
-              coastlinecolor: "#94a3b8",
-              countrycolor: "#cbd5e1",
-              bgcolor: "#f8fafc",
-            },
-            margin: { t: title ? 48 : 24, l: 0, r: 0, b: 0 },
-            dragmode: "pan",
-          };
+        function resetForm() {
+          selectedOrigin = null;
+          selectedDestination = null;
+          selectionValidationOk = false;
+          currentAirports = [];
+
+          document.getElementById("q").value = "";
+          document.getElementById("iata").value = "";
+          document.getElementById("start-time").value = "";
+          document.getElementById("end-time").value = "";
+          document.getElementById("travel-value").value = "";
+          document.getElementById("travel-date").value = todayIsoDate();
+
+          const originRadio = document.querySelector('input[name="click-role"][value="origin"]');
+          if (originRadio) {
+            originRadio.checked = true;
+          }
+
+          updateSelectionSummary();
+          setValidationMessage("", "");
+          syncContinueAfterValidation();
+          setItineraryResult("", "");
+          setStatus("Formulario reiniciado. Puedes planificar un nuevo viaje.");
+
+          refreshItineraryIdField().then(function () {
+            syncItineraryCreateButton();
+          });
+
+          ensureLeafletMap();
+          redrawMap();
         }
 
-        const plotConfig = { scrollZoom: true, responsive: true, displaylogo: false };
+        /** @type {L.Map | null} */
+        let leafletMap = null;
+        /** @type {L.LayerGroup | null} */
+        let markersLayer = null;
 
-        function markerStyles(airports) {
-          const colors = [];
-          const sizes = [];
-          for (let i = 0; i < airports.length; i++) {
-            const a = airports[i];
-            if (selectedOrigin && a.id === selectedOrigin.id) {
-              colors.push("#16a34a");
-              sizes.push(14);
-            } else if (selectedDestination && a.id === selectedDestination.id) {
-              colors.push("#dc2626");
-              sizes.push(14);
-            } else {
-              colors.push("#1d4ed8");
-              sizes.push(11);
-            }
+        const MAP_DEFAULT_CENTER = [4.5709, -74.2973];
+        const MAP_DEFAULT_ZOOM = 5;
+
+        function ensureLeafletMap() {
+          if (leafletMap) {
+            return;
           }
-          return { colors: colors, sizes: sizes };
+          leafletMap = L.map(mapEl, { scrollWheelZoom: true }).setView(MAP_DEFAULT_CENTER, MAP_DEFAULT_ZOOM);
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          }).addTo(leafletMap);
+          markersLayer = L.layerGroup().addTo(leafletMap);
+          setTimeout(function () {
+            leafletMap.invalidateSize();
+          }, 100);
         }
 
-        function onMapClick(ev) {
-          if (!currentAirports.length) {
-            return;
+        function markerColorFor(airport) {
+          if (selectedOrigin && airport.id === selectedOrigin.id) {
+            return "#16a34a";
           }
-          const pt = ev.points && ev.points[0];
-          if (!pt || typeof pt.pointIndex !== "number") {
-            return;
+          if (selectedDestination && airport.id === selectedDestination.id) {
+            return "#dc2626";
           }
-          const airport = currentAirports[pt.pointIndex];
-          if (!airport) {
-            return;
+          return "#1d4ed8";
+        }
+
+        function markerRadiusFor(airport) {
+          if (
+            (selectedOrigin && airport.id === selectedOrigin.id) ||
+            (selectedDestination && airport.id === selectedDestination.id)
+          ) {
+            return 10;
           }
+          return 8;
+        }
+
+        function selectAirportFromMap(airport) {
           const roleInput = document.querySelector('input[name="click-role"]:checked');
           const role = roleInput ? roleInput.value : "origin";
           const copy = {
@@ -476,86 +1186,102 @@
           }
           updateSelectionSummary();
           invalidateValidation("selection-changed");
-          itineraryResultEl.textContent = "";
+          setItineraryResult("", "");
           setStatus(
-            "Selección actualizada en cliente (sin llamadas nuevas al servidor). Marcadores: verde = origen, rojo = destino, azul = resto."
+            "Selección actualizada. Marcadores: verde = origen, rojo = destino, azul = resto."
           );
           redrawMap();
         }
 
+        function airportsForMap() {
+          const byId = new Map();
+          currentAirports.forEach(function (airport) {
+            byId.set(airport.id, airport);
+          });
+          if (selectedOrigin) {
+            byId.set(selectedOrigin.id, selectedOrigin);
+          }
+          if (selectedDestination) {
+            byId.set(selectedDestination.id, selectedDestination);
+          }
+          return Array.from(byId.values());
+        }
+
         function redrawMap() {
-          if (!currentAirports.length) {
+          ensureLeafletMap();
+          if (!markersLayer) {
             return;
           }
-          const styles = markerStyles(currentAirports);
-          const trace = {
-            type: "scattergeo",
-            mode: "markers",
-            lon: currentAirports.map(function (a) {
-              return a.longitude;
-            }),
-            lat: currentAirports.map(function (a) {
-              return a.latitude;
-            }),
-            text: currentAirports.map(function (a) {
-              return a.name + " (" + a.id + ")<br>" + a.city;
-            }),
-            hoverinfo: "text",
-            marker: {
-              size: styles.sizes,
-              color: styles.colors,
-              line: { width: 1, color: "#fff" },
-            },
-          };
-          const layout = defaultLayout("Ubicación geográfica");
-          layout.geo.fitbounds = "locations";
-          if (typeof Plotly.purge === "function") {
-            Plotly.purge(mapEl);
+          markersLayer.clearLayers();
+          const airports = airportsForMap();
+          if (!airports.length) {
+            leafletMap.setView(MAP_DEFAULT_CENTER, MAP_DEFAULT_ZOOM);
+            return;
           }
-          const drawn = Plotly.newPlot(mapEl, [trace], layout, plotConfig);
-          if (drawn && typeof drawn.then === "function") {
-            drawn.then(function () {
-              mapEl.on("plotly_click", onMapClick);
+
+          const latLngs = [];
+          airports.forEach(function (airport) {
+            const lat = airport.latitude;
+            const lon = airport.longitude;
+            latLngs.push([lat, lon]);
+            const marker = L.circleMarker([lat, lon], {
+              radius: markerRadiusFor(airport),
+              color: "#ffffff",
+              weight: 1,
+              fillColor: markerColorFor(airport),
+              fillOpacity: 0.95,
             });
+            marker.bindPopup(
+              "<strong>" +
+                airport.name +
+                "</strong> (" +
+                airport.id +
+                ")<br>" +
+                airport.city
+            );
+            marker.on("click", function () {
+              selectAirportFromMap(airport);
+            });
+            marker.addTo(markersLayer);
+          });
+
+          if (latLngs.length === 1) {
+            leafletMap.setView(latLngs[0], 8);
           } else {
-            mapEl.on("plotly_click", onMapClick);
+            leafletMap.fitBounds(L.latLngBounds(latLngs), { padding: [40, 40] });
           }
+          leafletMap.invalidateSize();
         }
 
         function renderEmptyMap(message, options) {
           const preserveStatus = options && options.preserveStatus;
           currentAirports = [];
-          selectedOrigin = null;
-          selectedDestination = null;
           updateSelectionSummary();
           invalidateValidation("silent");
           setValidationMessage("", "");
-          itineraryResultEl.textContent = "";
+          setItineraryResult("", "");
           if (!preserveStatus) {
             setStatus(message);
           }
-          if (typeof Plotly.purge === "function") {
-            Plotly.purge(mapEl);
-          }
-          Plotly.newPlot(mapEl, [], defaultLayout("Sin puntos en el mapa"), plotConfig);
+          ensureLeafletMap();
+          redrawMap();
         }
 
         function renderAirports(airports) {
           if (!airports.length) {
-            renderEmptyMap("Sin resultados: lista vacía (no es error).");
+            renderEmptyMap("No encontramos aeropuertos con ese criterio.");
             return;
           }
           currentAirports = airports.slice();
-          selectedOrigin = null;
-          selectedDestination = null;
+          rememberAirportCities(currentAirports);
           updateSelectionSummary();
           invalidateValidation("silent");
           setValidationMessage("", "");
-          itineraryResultEl.textContent = "";
+          setItineraryResult("", "");
           setStatus(
-            "Mostrando " +
+            "Se encontraron " +
               currentAirports.length +
-              " aeropuerto(s). Clic en un marcador para origen o destino (solo datos ya cargados)."
+              " aeropuerto(s). Haz clic en un marcador para asignar origen o destino."
           );
           redrawMap();
         }
@@ -567,32 +1293,556 @@
           try {
             data = text ? JSON.parse(text) : null;
           } catch (e) {
-            throw new Error("Respuesta no JSON del Airport Service.");
+            throw new Error("__FETCH_ERROR__");
           }
           if (!res.ok) {
             const detail = data && data.detail ? data.detail : res.statusText;
-            throw new Error(detail || "Error HTTP " + res.status);
+            throw new Error(detail || "__FETCH_ERROR__");
           }
           return data;
         }
 
-        document.getElementById("btn-search").addEventListener("click", async function () {
+        function rememberAirportCities(airports) {
+          if (!Array.isArray(airports)) {
+            return;
+          }
+          airports.forEach(function (airport) {
+            if (airport && airport.id && airport.city) {
+              airportCityCache[String(airport.id).toUpperCase()] = String(airport.city).trim();
+            }
+          });
+        }
+
+        async function fetchAirportCity(iata) {
+          const code = String(iata || "").trim().toUpperCase();
+          if (!code) {
+            return "—";
+          }
+          if (airportCityCache[code]) {
+            return airportCityCache[code];
+          }
+          try {
+            const data = await fetchJson(API_BASE + "/api/airports/" + encodeURIComponent(code) + "/");
+            const city = data && data.city ? String(data.city).trim() : "";
+            airportCityCache[code] = city || code;
+          } catch (e) {
+            airportCityCache[code] = code;
+          }
+          return airportCityCache[code];
+        }
+
+        async function buildAirportCityLookup(items) {
+          const codes = {};
+          items.forEach(function (item) {
+            if (item.origin_airport_id) {
+              codes[String(item.origin_airport_id).toUpperCase()] = true;
+            }
+            if (item.destination_airport_id) {
+              codes[String(item.destination_airport_id).toUpperCase()] = true;
+            }
+          });
+          const uniqueCodes = Object.keys(codes);
+          await Promise.all(
+            uniqueCodes.map(function (code) {
+              return fetchAirportCity(code);
+            })
+          );
+          const lookup = {};
+          uniqueCodes.forEach(function (code) {
+            lookup[code] = airportCityCache[code] || code;
+          });
+          return lookup;
+        }
+
+        function formatRouteCities(originId, destId, cityLookup) {
+          const originCode = String(originId || "").trim().toUpperCase();
+          const destCode = String(destId || "").trim().toUpperCase();
+          const lookup = cityLookup || airportCityCache;
+          const originCity = (originCode && lookup[originCode]) || originCode || "—";
+          const destCity = (destCode && lookup[destCode]) || destCode || "—";
+          return originCity + " → " + destCity;
+        }
+
+        function formatAirportOptionLabel(airport) {
+          const city = (airport && airport.city) || "—";
+          const name = (airport && airport.name) || (airport && airport.id) || "—";
+          const id = (airport && airport.id) || "—";
+          return city + " — " + name + " (" + id + ")";
+        }
+
+        function populateEditAirportSelect(selectEl, airports, selectedId) {
+          selectEl.replaceChildren();
+          const empty = document.createElement("option");
+          empty.value = "";
+          empty.textContent = "Elige un aeropuerto";
+          selectEl.appendChild(empty);
+          (airports || []).forEach(function (airport) {
+            if (!airport || !airport.id) {
+              return;
+            }
+            const option = document.createElement("option");
+            option.value = String(airport.id).toUpperCase();
+            option.textContent = formatAirportOptionLabel(airport);
+            if (selectedId && option.value === String(selectedId).toUpperCase()) {
+              option.selected = true;
+            }
+            selectEl.appendChild(option);
+          });
+        }
+
+        async function fetchAirportById(iata) {
+          const code = String(iata || "").trim().toUpperCase();
+          if (!code) {
+            return null;
+          }
+          return fetchJson(API_BASE + "/api/airports/" + encodeURIComponent(code) + "/");
+        }
+
+        async function loadEditAirportSelect(selectId, qInputId, iata) {
+          const selectEl = document.getElementById(selectId);
+          const qInput = document.getElementById(qInputId);
+          if (!iata) {
+            populateEditAirportSelect(selectEl, [], "");
+            if (qInput) {
+              qInput.value = "";
+            }
+            return;
+          }
+          try {
+            const airport = await fetchAirportById(iata);
+            rememberAirportCities([airport]);
+            populateEditAirportSelect(selectEl, [airport], iata);
+            if (qInput && airport && airport.city) {
+              qInput.value = airport.city;
+            }
+          } catch (e) {
+            populateEditAirportSelect(
+              selectEl,
+              [{ id: iata, city: iata, name: iata }],
+              iata
+            );
+          }
+        }
+
+        async function searchAirportsByCity(q) {
+          const term = String(q || "").trim();
+          if (!term) {
+            return [];
+          }
+          const data = await fetchJson(
+            API_BASE + "/api/airports/search/?q=" + encodeURIComponent(term)
+          );
+          return Array.isArray(data) ? data : [];
+        }
+
+        async function runCreateCitySearch() {
           const q = document.getElementById("q").value.trim();
           const btn = document.getElementById("btn-search");
+          if (!q) {
+            setStatus("Escribe el nombre de una ciudad para buscar.", true);
+            return;
+          }
           btn.disabled = true;
-          setStatus("Cargando…");
+          setStatus("Buscando aeropuertos…");
           try {
-            const url = API_BASE + "/api/airports/search/?q=" + encodeURIComponent(q);
-            const data = await fetchJson(url);
-            if (!Array.isArray(data)) {
-              throw new Error("Formato inesperado: se esperaba un arreglo.");
+            const data = await searchAirportsByCity(q);
+            if (!data.length) {
+              renderEmptyMap("No encontramos aeropuertos para «" + q + "».", {
+                preserveStatus: true,
+              });
+              setStatus("No encontramos aeropuertos para «" + q + "».", true);
+              return;
             }
             renderAirports(data);
           } catch (err) {
-            setStatus(err.message || String(err), true);
+            setStatus(friendlyAirportError(err.message || String(err)), true);
             renderEmptyMap("", { preserveStatus: true });
           } finally {
             btn.disabled = false;
+          }
+        }
+
+        async function searchAirportsForEdit(role) {
+          const isOrigin = role === "origin";
+          const qInput = document.getElementById(isOrigin ? "edit-origin-q" : "edit-dest-q");
+          const selectId = isOrigin ? "edit-origin-airport" : "edit-dest-airport";
+          const searchBtn = document.getElementById(isOrigin ? "edit-origin-search" : "edit-dest-search");
+          const errorEl = document.getElementById("edit-modal-error");
+          const q = qInput.value.trim();
+          if (!q) {
+            errorEl.textContent = "Escribe el nombre de una ciudad para buscar aeropuertos.";
+            return;
+          }
+          errorEl.textContent = "";
+          if (searchBtn) {
+            searchBtn.disabled = true;
+          }
+          try {
+            const data = await searchAirportsByCity(q);
+            if (!data.length) {
+              errorEl.textContent = "No encontramos aeropuertos para «" + q + "».";
+              return;
+            }
+            rememberAirportCities(data);
+            const selectEl = document.getElementById(selectId);
+            const current = selectEl.value;
+            populateEditAirportSelect(selectEl, data, current);
+            if (data.length === 1) {
+              selectEl.value = String(data[0].id).toUpperCase();
+            }
+          } catch (err) {
+            errorEl.textContent = friendlyAirportError(err.message || String(err));
+          } finally {
+            if (searchBtn) {
+              searchBtn.disabled = false;
+            }
+          }
+        }
+
+
+        function statusBadgeClass(code) {
+          const normalized = String(code || "").toUpperCase();
+          if (normalized === "IN_PROGRESS") {
+            return "status-in-progress";
+          }
+          if (normalized === "COMPLETED") {
+            return "status-completed";
+          }
+          return "status-pending";
+        }
+
+        function renderBitacoraSummary(summary) {
+          const counts = (summary && summary.count_by_status) || {};
+          document.getElementById("metric-total").textContent = String(
+            summary && summary.total_itineraries != null ? summary.total_itineraries : 0
+          );
+          document.getElementById("metric-pending").textContent = String(counts.PENDING || 0);
+          document.getElementById("metric-in-progress").textContent = String(counts.IN_PROGRESS || 0);
+          document.getElementById("metric-completed").textContent = String(counts.COMPLETED || 0);
+          document.getElementById("metric-total-value").textContent = formatCopCurrency(
+            summary && summary.total_value != null ? summary.total_value : 0
+          );
+        }
+
+        function renderBitacoraTable(items, cityLookup) {
+          const lookup = cityLookup || airportCityCache;
+          const table = document.getElementById("bitacora-table");
+          const tbody = document.getElementById("bitacora-table-body");
+          const emptyEl = document.getElementById("bitacora-empty");
+          tbody.replaceChildren();
+
+          if (!items.length) {
+            table.classList.add("hidden");
+            emptyEl.classList.remove("hidden");
+            emptyEl.textContent = "Aún no hay viajes registrados.";
+            return;
+          }
+
+          const sorted = items.slice().sort(function (a, b) {
+            return parseItinerarySeq(b.itinerary_id) - parseItinerarySeq(a.itinerary_id);
+          });
+
+          sorted.forEach(function (item) {
+            const row = document.createElement("tr");
+            const route = formatRouteCities(
+              item.origin_airport_id,
+              item.destination_airport_id,
+              lookup
+            );
+            const date = formatDateDisplay(item.start_date || item.end_date || "");
+            const schedule =
+              formatTimeDisplay(item.start_time) + " – " + formatTimeDisplay(item.end_time);
+            const statusCode = String(item.status || "PENDING").toUpperCase();
+            const statusLabel = formatItineraryStatus(statusCode);
+
+            [item.itinerary_id || "—", route, date, schedule].forEach(function (cellText) {
+              const cell = document.createElement("td");
+              cell.textContent = cellText;
+              row.appendChild(cell);
+            });
+
+            const valueCell = document.createElement("td");
+            valueCell.textContent = formatCopCurrency(item.value != null ? item.value : 0);
+            row.appendChild(valueCell);
+
+            const statusCell = document.createElement("td");
+            const badge = document.createElement("span");
+            badge.className = "status-badge " + statusBadgeClass(statusCode);
+            badge.textContent = statusLabel;
+            statusCell.appendChild(badge);
+            row.appendChild(statusCell);
+
+            const actionCell = document.createElement("td");
+            actionCell.className = "col-action";
+            const isCompleted = statusCode === "COMPLETED";
+            const actionsWrap = document.createElement("div");
+            actionsWrap.className = "bitacora-actions";
+
+            const editBtn = document.createElement("button");
+            editBtn.type = "button";
+            editBtn.className = "btn-edit-itinerary";
+            editBtn.textContent = "Editar";
+            editBtn.disabled = isCompleted;
+            editBtn.title = isCompleted
+              ? "No se puede editar un viaje completado"
+              : "Editar viaje " + (item.itinerary_id || "");
+            if (!isCompleted) {
+              editBtn.addEventListener("click", function () {
+                openEditModal(item);
+              });
+            }
+            actionsWrap.appendChild(editBtn);
+
+            const cancelBtn = document.createElement("button");
+            cancelBtn.type = "button";
+            cancelBtn.className = "btn-cancel-itinerary";
+            cancelBtn.textContent = "Cancelar";
+            cancelBtn.title = "Cancelar viaje " + (item.itinerary_id || "");
+            cancelBtn.addEventListener("click", function () {
+              cancelItinerary(
+                item.itinerary_id,
+                formatRouteCities(item.origin_airport_id, item.destination_airport_id, lookup)
+              );
+            });
+            actionsWrap.appendChild(cancelBtn);
+            actionCell.appendChild(actionsWrap);
+            row.appendChild(actionCell);
+            tbody.appendChild(row);
+          });
+
+          table.classList.remove("hidden");
+          emptyEl.classList.add("hidden");
+        }
+
+        async function patchItineraryById(itineraryId, body) {
+          const url =
+            ITINERARY_BASE + "/api/itineraries/" + encodeURIComponent(itineraryId) + "/";
+          const res = await fetch(url, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const text = await res.text();
+          let data;
+          try {
+            data = text ? JSON.parse(text) : null;
+          } catch (e) {
+            throw new Error("__FETCH_ERROR__");
+          }
+          if (!res.ok) {
+            const detail = data && data.detail ? data.detail : res.statusText;
+            throw new Error(detail || "__FETCH_ERROR__");
+          }
+          return data;
+        }
+
+        async function openEditModal(item) {
+          if (!item || !item.itinerary_id) {
+            return;
+          }
+          if (String(item.status || "").toUpperCase() === "COMPLETED") {
+            return;
+          }
+          editingItineraryItem = item;
+          document.getElementById("edit-modal-itinerary-id").textContent = item.itinerary_id;
+          document.getElementById("edit-travel-date").value = item.start_date || item.end_date || "";
+          document.getElementById("edit-start-time").value = toTimeInputValue(item.start_time);
+          document.getElementById("edit-end-time").value = toTimeInputValue(item.end_time);
+          document.getElementById("edit-travel-value").value =
+            item.value != null ? String(item.value) : "";
+          document.getElementById("edit-modal-error").textContent = "";
+          document.getElementById("edit-itinerary-modal").classList.remove("hidden");
+          try {
+            await Promise.all([
+              loadEditAirportSelect(
+                "edit-origin-airport",
+                "edit-origin-q",
+                item.origin_airport_id
+              ),
+              loadEditAirportSelect(
+                "edit-dest-airport",
+                "edit-dest-q",
+                item.destination_airport_id
+              ),
+            ]);
+          } catch (err) {
+            document.getElementById("edit-modal-error").textContent = friendlyAirportError(
+              err.message || String(err)
+            );
+          }
+        }
+
+        function closeEditModal() {
+          editingItineraryItem = null;
+          document.getElementById("edit-modal-error").textContent = "";
+          document.getElementById("edit-itinerary-modal").classList.add("hidden");
+        }
+
+        async function saveEditedItinerary() {
+          const item = editingItineraryItem;
+          if (!item || !item.itinerary_id) {
+            return;
+          }
+
+          const origin = document.getElementById("edit-origin-airport").value.trim().toUpperCase();
+          const destination = document.getElementById("edit-dest-airport").value.trim().toUpperCase();
+          const travelDate = document.getElementById("edit-travel-date").value;
+          const startTime = document.getElementById("edit-start-time").value;
+          const endTime = document.getElementById("edit-end-time").value;
+          const travelValue = parseTravelValueInput(
+            document.getElementById("edit-travel-value").value
+          );
+          const errorEl = document.getElementById("edit-modal-error");
+          const saveBtn = document.getElementById("btn-save-edit-itinerary");
+
+          if (!origin || !destination) {
+            errorEl.textContent =
+              "Selecciona origen y destino buscando la ciudad y eligiendo un aeropuerto.";
+            return;
+          }
+          if (!travelDate || !startTime || !endTime || travelValue === null) {
+            errorEl.textContent = "Completa todos los campos, incluido el valor en COP.";
+            return;
+          }
+
+          errorEl.textContent = "";
+          saveBtn.disabled = true;
+          document.querySelectorAll(".btn-edit-itinerary").forEach(function (btn) {
+            btn.disabled = true;
+          });
+          setStatus("Guardando cambios en " + item.itinerary_id + "…", false);
+
+          try {
+            await patchItineraryById(item.itinerary_id, {
+              origin_airport_id: origin,
+              destination_airport_id: destination,
+              start_date: travelDate,
+              end_date: travelDate,
+              start_time: startTime.length === 5 ? startTime + ":00" : startTime,
+              end_time: endTime.length === 5 ? endTime + ":00" : endTime,
+              value: travelValue,
+            });
+            closeEditModal();
+            setStatus("Viaje " + item.itinerary_id + " actualizado correctamente.", false);
+            await refreshBitacora();
+          } catch (err) {
+            errorEl.textContent = friendlyItineraryError(err.message || String(err));
+            setStatus(errorEl.textContent, true);
+          } finally {
+            saveBtn.disabled = false;
+            if (editingItineraryItem) {
+              document.querySelectorAll(".btn-edit-itinerary").forEach(function (btn) {
+                btn.disabled = btn.title.indexOf("completado") !== -1;
+              });
+            }
+          }
+        }
+
+        async function deleteItineraryById(itineraryId) {
+          const url =
+            ITINERARY_BASE + "/api/itineraries/" + encodeURIComponent(itineraryId) + "/";
+          const res = await fetch(url, { method: "DELETE" });
+          if (res.status === 204) {
+            return;
+          }
+          const text = await res.text();
+          let data;
+          try {
+            data = text ? JSON.parse(text) : null;
+          } catch (e) {
+            throw new Error("__FETCH_ERROR__");
+          }
+          if (!res.ok) {
+            const detail = data && data.detail ? data.detail : res.statusText;
+            throw new Error(detail || "__FETCH_ERROR__");
+          }
+        }
+
+        async function cancelItinerary(itineraryId, routeLabel) {
+          if (!itineraryId) {
+            return;
+          }
+          const route = routeLabel || "—";
+          const confirmed = window.confirm(
+            "¿Cancelar el viaje " + itineraryId + " (" + route + ")?\n\nEsta acción no se puede deshacer."
+          );
+          if (!confirmed) {
+            return;
+          }
+
+          const errorEl = document.getElementById("bitacora-load-error");
+          const cancelButtons = document.querySelectorAll(".btn-cancel-itinerary");
+          errorEl.textContent = "";
+          cancelButtons.forEach(function (btn) {
+            btn.disabled = true;
+          });
+          setStatus("Cancelando viaje " + itineraryId + "…", false);
+
+          try {
+            await deleteItineraryById(itineraryId);
+            setStatus("Viaje " + itineraryId + " cancelado correctamente.", false);
+            await refreshBitacora();
+            await refreshItineraryIdField();
+          } catch (err) {
+            const message = friendlyItineraryError(err.message || String(err));
+            errorEl.textContent = message;
+            setStatus(message, true);
+          } finally {
+            cancelButtons.forEach(function (btn) {
+              btn.disabled = false;
+            });
+          }
+        }
+
+        async function refreshBitacora() {
+          const errorEl = document.getElementById("bitacora-load-error");
+          const refreshBtn = document.getElementById("btn-refresh-bitacora");
+          errorEl.textContent = "";
+          if (refreshBtn) {
+            refreshBtn.disabled = true;
+          }
+          try {
+            const summary = await fetchJson(ITINERARY_BASE + "/api/itineraries/summary/");
+            const list = await fetchJson(ITINERARY_BASE + "/api/itineraries/");
+            const items = Array.isArray(list) ? list : [];
+            const cityLookup = items.length ? await buildAirportCityLookup(items) : {};
+            renderBitacoraSummary(summary);
+            renderBitacoraTable(items, cityLookup);
+          } catch (err) {
+            errorEl.textContent = friendlyItineraryError(err.message || String(err));
+            renderBitacoraSummary({ total_itineraries: 0, total_value: 0, count_by_status: {} });
+            renderBitacoraTable([], {});
+          } finally {
+            if (refreshBtn) {
+              refreshBtn.disabled = false;
+            }
+          }
+        }
+
+        async function refreshItineraryIdField() {
+          const field = document.getElementById("itinerary-id");
+          let maxSeq = parseInt(localStorage.getItem(ITINERARY_ID_SEQ_KEY) || "0", 10);
+          try {
+            const data = await fetchJson(ITINERARY_BASE + "/api/itineraries/");
+            if (Array.isArray(data)) {
+              data.forEach(function (item) {
+                maxSeq = Math.max(maxSeq, parseItinerarySeq(item.itinerary_id));
+              });
+            }
+          } catch (e) {
+            /* Si el listado falla, se usa el último valor local. */
+          }
+          field.value = formatItineraryId(maxSeq + 1);
+        }
+
+        document.getElementById("btn-search").addEventListener("click", function () {
+          runCreateCitySearch();
+        });
+
+        document.getElementById("q").addEventListener("keydown", function (event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            runCreateCitySearch();
           }
         });
 
@@ -600,17 +1850,17 @@
           const id = document.getElementById("iata").value.trim().toUpperCase();
           const btn = document.getElementById("btn-by-id");
           btn.disabled = true;
-          setStatus("Cargando…");
+          setStatus("Buscando aeropuertos…");
           try {
             if (!id) {
-              renderEmptyMap("Indica un código IATA.");
+              renderEmptyMap("Escribe un código de aeropuerto (ej. BOG).");
               return;
             }
             const url = API_BASE + "/api/airports/" + encodeURIComponent(id) + "/";
             const data = await fetchJson(url);
             renderAirports([data]);
           } catch (err) {
-            setStatus(err.message || String(err), true);
+            setStatus(friendlyAirportError(err.message || String(err)), true);
             renderEmptyMap("", { preserveStatus: true });
           } finally {
             btn.disabled = false;
@@ -621,6 +1871,10 @@
           runValidateSelection();
         });
 
+        document.getElementById("btn-clear-selection").addEventListener("click", function () {
+          resetForm();
+        });
+
         document.getElementById("btn-continue-step").addEventListener("click", function () {
           if (!selectionValidationOk) {
             return;
@@ -629,10 +1883,10 @@
           if (panel && panel.scrollIntoView) {
             panel.scrollIntoView({ behavior: "smooth", block: "start" });
           }
-          setStatus("Completa identificador, fecha y horas; luego usa Crear itinerario (POST al Itinerary Service).", false);
+          setStatus("Completa la fecha, las horas y el valor del viaje, luego pulsa Registrar itinerario.", false);
         });
 
-        ["itinerary-id", "travel-date", "start-time", "end-time"].forEach(function (id) {
+        ["travel-date", "start-time", "end-time", "travel-value"].forEach(function (id) {
           document.getElementById(id).addEventListener("input", syncItineraryCreateButton);
           document.getElementById(id).addEventListener("change", syncItineraryCreateButton);
         });
@@ -647,9 +1901,15 @@
           const travelDate = document.getElementById("travel-date").value;
           const startTime = document.getElementById("start-time").value;
           const endTime = document.getElementById("end-time").value;
+          const travelValue = parseTravelValueInput(document.getElementById("travel-value").value);
+          if (travelValue === null) {
+            setItineraryResult("Indica el valor del viaje en pesos colombianos (COP).", "err");
+            syncItineraryCreateButton();
+            return;
+          }
           const btn = document.getElementById("btn-create-itinerary");
           btn.disabled = true;
-          itineraryResultEl.textContent = "Enviando…";
+          setItineraryResult("Guardando itinerario…", "");
           try {
             const url = ITINERARY_BASE + "/api/itineraries/";
             const body = {
@@ -659,6 +1919,7 @@
               travel_date: travelDate,
               start_time: startTime.length === 5 ? startTime + ":00" : startTime,
               end_time: endTime.length === 5 ? endTime + ":00" : endTime,
+              value: travelValue,
             };
             const res = await fetch(url, {
               method: "POST",
@@ -670,29 +1931,92 @@
             try {
               data = text ? JSON.parse(text) : null;
             } catch (e) {
-              throw new Error("Respuesta no JSON del Itinerary Service.");
+              throw new Error("__FETCH_ERROR__");
             }
             if (!res.ok) {
               let detail = data && data.detail ? data.detail : res.statusText;
               if (detail && String(detail).toLowerCase().indexOf("solapa") !== -1) {
                 detail = "El itinerario se solapa con otro existente";
               }
-              throw new Error(detail || "Error HTTP " + res.status);
+              throw new Error(detail || "__FETCH_ERROR__");
             }
-            itineraryResultEl.textContent = "Creado: " + JSON.stringify(data, null, 2);
-            setStatus("Itinerario creado (201).", false);
+            const successMessage = buildItinerarySuccessMessage(
+              data,
+              o,
+              d,
+              travelDate,
+              startTime,
+              endTime,
+              travelValue
+            );
+            setItineraryResult(successMessage, "ok");
+            setStatus("Itinerario " + (data.itinerary_id || itineraryId) + " registrado correctamente.", false);
+            markItineraryIdUsed(parseItinerarySeq(itineraryId));
+            await refreshItineraryIdField();
+            await refreshBitacora();
           } catch (err) {
-            const em = err.message || String(err);
-            itineraryResultEl.textContent = "Error: " + em;
+            const em = friendlyItineraryError(err.message || String(err));
+            setItineraryResult(em, "err");
             setStatus(em, true);
           } finally {
             syncItineraryCreateButton();
           }
         });
 
-        renderEmptyMap("Busca o consulta un aeropuerto para ver el mapa.");
+        ensureLeafletMap();
+        renderEmptyMap("Busca una ciudad o un código IATA para empezar.");
         updateItineraryDisplays();
-        syncItineraryCreateButton();
+        refreshItineraryIdField().then(function () {
+          syncItineraryCreateButton();
+        });
+        refreshBitacora();
+
+        window.setInterval(function () {
+          refreshBitacora();
+        }, 60000);
+
+        document.getElementById("btn-refresh-bitacora").addEventListener("click", function () {
+          refreshBitacora();
+        });
+
+        document.getElementById("btn-save-edit-itinerary").addEventListener("click", function () {
+          saveEditedItinerary();
+        });
+        document.getElementById("btn-close-edit-itinerary").addEventListener("click", function () {
+          closeEditModal();
+        });
+        document.getElementById("edit-origin-search").addEventListener("click", function () {
+          searchAirportsForEdit("origin");
+        });
+        document.getElementById("edit-dest-search").addEventListener("click", function () {
+          searchAirportsForEdit("dest");
+        });
+        document.getElementById("edit-origin-q").addEventListener("keydown", function (event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            searchAirportsForEdit("origin");
+          }
+        });
+        document.getElementById("edit-dest-q").addEventListener("keydown", function (event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            searchAirportsForEdit("dest");
+          }
+        });
+        document.getElementById("edit-modal-backdrop").addEventListener("click", function () {
+          closeEditModal();
+        });
+        document.addEventListener("keydown", function (event) {
+          if (event.key === "Escape") {
+            closeEditModal();
+          }
+        });
+
+        window.addEventListener("resize", function () {
+          if (leafletMap) {
+            leafletMap.invalidateSize();
+          }
+        });
       })();
     </script>
   </body>

@@ -1,5 +1,6 @@
 from airport_service.application.ports.outbound.external_airport_port import ExternalAirportPort
 from airport_service.domain.airport import Airport
+from airport_service.domain.search_text import normalize_search_text
 
 
 class InMemoryExternalAirportAdapter(ExternalAirportPort):
@@ -35,9 +36,10 @@ class InMemoryExternalAirportAdapter(ExternalAirportPort):
         return None
 
     def search_airports(self, term: str) -> list[Airport]:
-        normalized = term.lower()
+        normalized = normalize_search_text(term)
         return [
             airport
             for airport in self._airports
-            if normalized in airport.name.lower() or normalized in airport.city.lower()
+            if normalized in normalize_search_text(airport.name)
+            or normalized in normalize_search_text(airport.city)
         ]
